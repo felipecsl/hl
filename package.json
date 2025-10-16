@@ -1,0 +1,23 @@
+{
+  "name": "hl",
+  "bin": "dist/hl.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild --bundle src/cli.ts --platform=node --outfile=dist/hl.js --external:typescript --external:@types/node --minify --sourcemap",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "commander": "^12",
+    "execa": "^9",
+    "js-yaml": "^4",
+    "kleur": "^4",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24",
+    "esbuild": "^0.25.11",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
