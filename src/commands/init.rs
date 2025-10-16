@@ -1,6 +1,7 @@
 use hl::{config::app_dir, log::*, systemd::write_unit};
 use anyhow::Result;
 use clap::Args;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tokio::fs;
 
@@ -29,6 +30,14 @@ pub struct InitArgs {
     /// ACME resolver name
     #[arg(long, default_value = "myresolver")]
     pub resolver: String,
+
+    /// Build context directory
+    #[arg(long, default_value = ".")]
+    pub context: String,
+
+    /// Dockerfile path
+    #[arg(long, default_value = "Dockerfile")]
+    pub dockerfile: String,
 }
 
 pub async fn execute(opts: InitArgs) -> Result<()> {
@@ -85,7 +94,50 @@ networks:
         compose_path.display(),
         env_path.display()
     ));
-    ok(&format!("enabled {}", unit));
+    ok(&format!("created {} (will be enabled on first deploy)", unit));
+
+    // Create bare git repository
+    let home = std::env::var("HOME")?;
+    let git_dir = Path::new(&home).join("prj/git").join(format!("{}.git", opts.app));
+    fs::create_dir_all(&git_dir).await?;
+
+    // Initialize bare git repository
+    let status = tokio::process::Command::new("git")
+        .arg("init")
+        .arg("--bare")
+        .arg(&git_dir)
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!("failed to initialize git repository");
+    }
+
+    // Create post-receive hook
+    let hooks_dir = git_dir.join("hooks");
+    let hook_path = hooks_dir.join("post-receive");
+
+    let hook_content = format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+while read -r oldrev newrev refname; do
+  case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
+    *) continue;;
+  esac
+  hl deploy --app {} --sha "$newrev" --branch "$branch" --context "{}" --dockerfile "{}"
+done
+"#,
+        opts.app, opts.context, opts.dockerfile
+    );
+
+    fs::write(&hook_path, hook_content).await?;
+
+    // Make hook executable
+    let mut perms = fs::metadata(&hook_path).await?.permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&hook_path, perms).await?;
+
+    ok(&format!("created git repository at {}", git_dir.display()));
 
     Ok(())
 }

@@ -10,6 +10,12 @@ cargo build
 cross build --target x86_64-unknown-linux-gnu --release
 ```
 
+## Deploying the tool
+
+```
+scp target/x86_64-unknown-linux-gnu/release/hl felipecsl-ubuntu-25:/home/felipecsl/.hl/bin/hl
+```
+
 ## Usage
 
 ```bash

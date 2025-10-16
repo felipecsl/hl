@@ -1,4 +1,4 @@
-use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*};
+use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*, systemd::enable_service};
 use anyhow::Result;
 use clap::Args;
 
@@ -48,6 +48,9 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
     log("retagging latest");
     retag_latest(&cfg.image, &tags.sha).await?;
+
+    log("enabling systemd service");
+    enable_service(&cfg.app).await?;
 
     log("restarting compose");
     restart_compose(&cfg).await?;

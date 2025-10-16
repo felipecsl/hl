@@ -57,7 +57,13 @@ WantedBy=default.target
         anyhow::bail!("systemctl --user daemon-reload failed");
     }
 
-    // Enable and start the service
+    Ok(unit)
+}
+
+pub async fn enable_service(app: &str) -> Result<()> {
+    let unit = format!("app-{}.service", app);
+
+    // Enable and start the service (idempotent operation)
     let status = Command::new("systemctl")
         .args(["--user", "enable", "--now", &unit])
         .stdin(Stdio::inherit())
@@ -70,5 +76,5 @@ WantedBy=default.target
         anyhow::bail!("systemctl --user enable failed");
     }
 
-    Ok(unit)
+    Ok(())
 }
