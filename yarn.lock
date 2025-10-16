@@ -173,7 +173,7 @@ cross-spawn@^7.0.6:
     shebang-command "^2.0.0"
     which "^2.0.1"
 
-esbuild@^0.25.11, esbuild@~0.25.0:
+esbuild@~0.25.0:
   version "0.25.11"
   resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.25.11.tgz"
   integrity sha512-KohQwyzrKTQmhXDW1PjCv3Tyspn9n5GcY2RTDqeORIdIJY8yKIF7sTSopFmn/wpMPW4rdPXI0UE5LJLuq3bx0Q==

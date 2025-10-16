@@ -2,14 +2,14 @@
 import { Command } from "commander";
 import { promises as fs } from "fs";
 import path from "path";
-import { appDir } from "../lib/config.js";
-import { writeUnit } from "../lib/systemd.js";
-import { log, ok } from "../lib/log.js";
+import { appDir } from "../lib/config.ts";
+import { writeUnit } from "../lib/systemd.ts";
+import { log, ok } from "../lib/log.ts";
 
 export function register(prog: Command) {
   prog
     .command("init")
-    .description("Create compose.yml, .env, systemd for an app")
+    .description("Initializes a new app with its configuration files")
     .requiredOption("--app <name>")
     .requiredOption("--image <ref>")
     .requiredOption("--domain <host>")
@@ -19,7 +19,6 @@ export function register(prog: Command) {
     .action(async (opts) => {
       const d = appDir(opts.app);
       await fs.mkdir(d, { recursive: true });
-
       const envPath = path.join(d, ".env");
       try {
         await fs.access(envPath);
@@ -51,7 +50,6 @@ networks:
     name: ${opts.network}
 `;
       await fs.writeFile(path.join(d, "compose.yml"), compose);
-
       const unit = await writeUnit(opts.app);
       log(`wrote ${path.join(d, "compose.yml")} and ${envPath}`);
       ok(`enabled ${unit}`);

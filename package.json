@@ -2,8 +2,12 @@
   "name": "hl",
   "bin": "dist/hl.js",
   "type": "module",
+  "license": "MIT",
+  "version": "0.0.1",
   "scripts": {
-    "build": "esbuild --bundle src/cli.ts --platform=node --outfile=dist/hl.js --external:typescript --external:@types/node --minify --sourcemap",
+    "bundle": "npx esbuild --bundle src/cli.ts --platform=node --outfile=dist/hl.js --external:typescript --external:@types/node --minify --sourcemap",
+    "build": "./scripts/build-linux.sh",
+    "deploy": "scp dist/hl felipecsl-ubuntu-25:/home/felipecsl/.hl/bin/hl; ssh felipecsl@felipecsl-ubuntu-25 'chmod +x /home/felipecsl/.hl/bin/hl'",
     "dev": "tsx src/cli.ts"
   },
   "dependencies": {
@@ -16,7 +20,6 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24",
-    "esbuild": "^0.25.11",
     "tsx": "^4",
     "typescript": "^5"
   }
