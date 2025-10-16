@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
 
-pub const HL_ROOT: &str = "/home/felipecsl/prj/apps";
+pub fn hl_root() -> PathBuf {
+    let home = std::env::var("HOME").expect("HOME environment variable not set");
+    PathBuf::from(home).join("prj").join("apps")
+}
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -77,14 +80,14 @@ impl Default for MigrationsConfig {
 }
 
 pub async fn load_config(app: &str) -> Result<HLConfig> {
-    let path = PathBuf::from(HL_ROOT).join(app).join("homelab.yml");
+    let path = hl_root().join(app).join("homelab.yml");
     let content = fs::read_to_string(&path).await?;
     let config: HLConfig = serde_yaml::from_str(&content)?;
     Ok(config)
 }
 
 pub fn app_dir(app: &str) -> PathBuf {
-    PathBuf::from(HL_ROOT).join(app)
+    hl_root().join(app)
 }
 
 pub fn env_file(app: &str) -> PathBuf {

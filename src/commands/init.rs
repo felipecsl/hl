@@ -45,8 +45,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
     }
 
     let compose = format!(
-        r#"version: "3.9"
-services:
+        r#"services:
   {}:
     image: {}:latest
     restart: unless-stopped
@@ -57,7 +56,7 @@ services:
       - "traefik.http.routers.{}.rule=Host(`${{{}}}`)"
       - "traefik.http.routers.{}.entrypoints=websecure"
       - "traefik.http.routers.{}.tls.certresolver={}"
-      - "traefik.http.services.{}.loadbalancer.server.port=${{{{SERVICE_PORT}}}}"
+      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}"
 networks:
   {}:
     external: true
