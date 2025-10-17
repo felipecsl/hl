@@ -123,3 +123,26 @@ pub async fn enable_service(app: &str) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn restart_service(app: &str) -> Result<()> {
+    let unit = format!("app-{}.service", app);
+
+    debug(&format!("restarting systemd service: {}", unit));
+
+    // Restart the service
+    let status = Command::new("systemctl")
+        .args(["--user", "restart", &unit])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!("systemctl --user restart failed with status: {}", status);
+    }
+
+    debug("systemd service restarted successfully");
+
+    Ok(())
+}

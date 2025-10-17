@@ -1,5 +1,6 @@
 use crate::config::{app_dir, env_file, HLConfig};
 use crate::log::debug;
+use crate::systemd::restart_service;
 use anyhow::Result;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -146,23 +147,7 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("docker compose pull failed with status: {}", status);
     }
 
-    debug("restarting service with systemctl");
-
-    // Restart service using systemctl
-    let unit = format!("app-{}.service", cfg.app);
-    let status = Command::new("systemctl")
-        .args(["--user", "restart", &unit])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        anyhow::bail!("systemctl restart failed with status: {}", status);
-    }
-
-    debug("service restarted successfully");
+    restart_service(&cfg.app).await?;
 
     Ok(())
 }

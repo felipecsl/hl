@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use hl::config::{app_dir, load_config};
 use hl::log::*;
-use hl::systemd::write_unit;
+use hl::systemd::{restart_service, write_unit};
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -178,6 +178,8 @@ networks:
     // Regenerate the systemd unit to include the new compose.postgres.yml file
     write_unit(&opts.app).await?;
     ok("regenerated systemd unit file to include postgres compose file");
+
+    restart_service(&opts.app).await?;
 
     Ok(())
 }
