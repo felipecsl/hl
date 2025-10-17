@@ -1,11 +1,14 @@
-# `hl` your homelab app CLI
+# `hl` - your homelab app CLI
 
-Goal: A CLI to spin up, manage, deploy, and monitor apps on a homelab server, or any remote host, really.
+Ever wish you had your own private [Heroku](https://www.heroku.com/)?
+
+`hl` is a command line tool to spin up, manage, deploy, and monitor apps on a homelab server, or
+any remote host, really.
 
 `hl` needs Docker and git on the remote host.
 
-Apps are placed under `~/apps/<appname>` on the remote host, and each app is a git repository.
-Deploying an app happens automatically upon git push.
+Apps are placed under `~/apps/<appname>` on the remote host.
+Deploying an app happens automatically upon running `git push`.
 
 Traefik is used as a reverse proxy, so make sure you have it set up beforehand. Traefik is not
 currently managed by `hl` but may be in the future.
@@ -44,7 +47,7 @@ hl init --app myapp --image ghcr.io/user/myapp --domain app.example.com --port 3
 
 git remote add production ssh://user@host/path/to/myapp.git
 
-# Deploying an application happens automatically upon git push
+# Deploying to production
 git push production master
 
 # Rollback to a previous version
