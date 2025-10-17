@@ -80,7 +80,13 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     restart_compose(&cfg).await?;
 
     log("waiting for health");
-    wait_for_healthy(&cfg.health.url, &cfg.health.timeout, &cfg.health.interval).await?;
+    wait_for_healthy(
+        &cfg.network,
+        &cfg.health.url,
+        &cfg.health.timeout,
+        &cfg.health.interval,
+    )
+    .await?;
 
     // Clean up the temporary worktree
     if let Err(e) = tokio::fs::remove_dir_all(&worktree).await {

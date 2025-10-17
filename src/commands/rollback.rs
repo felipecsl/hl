@@ -23,7 +23,13 @@ pub async fn execute(args: RollbackArgs) -> Result<()> {
     restart_compose(&cfg).await?;
 
     log("waiting for health");
-    wait_for_healthy(&cfg.health.url, &cfg.health.timeout, &cfg.health.interval).await?;
+    wait_for_healthy(
+        &cfg.network,
+        &cfg.health.url,
+        &cfg.health.timeout,
+        &cfg.health.interval,
+    )
+    .await?;
 
     ok("rollback complete");
     Ok(())

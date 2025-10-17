@@ -50,6 +50,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
         r#"services:
   {}:
     image: {}:latest
+    container_name: {},
     restart: unless-stopped
     env_file: [.env]
     networks: [{}]
@@ -66,6 +67,7 @@ networks:
 "#,
         opts.app,
         opts.image,
+        opts.app,
         opts.network,
         opts.app,
         "DOMAIN",
