@@ -24,6 +24,8 @@ enum Commands {
     Deploy(commands::deploy::DeployArgs),
     /// Initializes a new app with its configuration files
     Init(commands::init::InitArgs),
+    /// Restart a service using systemctl
+    Restart(commands::restart::RestartArgs),
     /// Retag :latest to a previous sha and restart (health-gated)
     Rollback(commands::rollback::RollbackArgs),
     /// Manage .env secrets
@@ -41,6 +43,7 @@ async fn main() -> Result<()> {
         Commands::Accessories(args) => commands::accessories::execute(args).await?,
         Commands::Deploy(args) => commands::deploy::execute(args).await?,
         Commands::Init(args) => commands::init::execute(args).await?,
+        Commands::Restart(args) => commands::restart::execute(args).await?,
         Commands::Rollback(args) => commands::rollback::execute(args).await?,
         Commands::Secrets(args) => commands::secrets::execute(args).await?,
     }
