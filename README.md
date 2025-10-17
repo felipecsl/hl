@@ -1,6 +1,14 @@
 # `hl` your homelab app CLI
 
-Goal: A CLI to spin up, manage, and monitor apps on a homelab server.
+Goal: A CLI to spin up, manage, deploy, and monitor apps on a homelab server, or any remote host, really.
+
+`hl` needs Docker and git on the remote host.
+
+Apps are placed under `~/apps/<appname>` on the remote host, and each app is a git repository.
+Deploying an app happens automatically upon git push.
+
+Traefik is used as a reverse proxy, so make sure you have it set up beforehand. Traefik is not
+currently managed by `hl` but may be in the future.
 
 ## Building
 
@@ -15,7 +23,17 @@ cross build --target x86_64-unknown-linux-gnu --release
 ## Deploying the tool
 
 ```bash
-scp target/x86_64-unknown-linux-gnu/release/hl host:/home/felipecsl/.hl/bin/hl
+scp target/x86_64-unknown-linux-gnu/release/hl host:/home/youruser/.hl/bin/hl
+```
+
+## Wrapper script
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+REMOTE_USER="${REMOTE_USER:-youruser}"
+REMOTE_HOST="${REMOTE_HOST:-your-remote-host.com}"
+ssh "${REMOTE_USER}@${REMOTE_HOST}" "~/.hl/bin/hl $*"
 ```
 
 ## Usage
