@@ -92,7 +92,7 @@ impl Default for MigrationsConfig {
 }
 
 pub async fn load_config(app: &str) -> Result<HLConfig> {
-    let path = app_dir(app).join("homelab.yml");
+    let path = app_dir(app).join("hl.yml");
     debug(&format!("loading config from: {}", path.display()));
 
     if !path.exists() {

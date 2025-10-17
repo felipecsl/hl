@@ -24,11 +24,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub port: u16,
 
-    /// Traefik network name
+    /// Traefik network name. Defaults to "traefik_proxy"
     #[arg(long, default_value = "traefik_proxy")]
     pub network: String,
 
-    /// ACME resolver name
+    /// ACME resolver name. Defaults to "myresolver"
     #[arg(long, default_value = "myresolver")]
     pub resolver: String,
 }
@@ -80,11 +80,51 @@ networks:
     let compose_path = dir.join("compose.yml");
     fs::write(&compose_path, compose).await?;
 
+    // TODO: hl currently makes a bunch of assumptions about the app being deployed:
+    // - it's a Rails app and environment is production
+    // - it uses RAILS_MASTER_KEY and SECRET_KEY_BASE secrets
+    // - it runs migrations with "bin/rails db:migrate"
+    // - it has a /healthz endpoint
+    // We should make these configurable in the future.
+    let hl_yml = format!(
+        r#"app: {}
+image: {}
+domain: {}
+servicePort: {}
+resolver: {}
+network: {}
+platforms: linux/amd64
+health:
+  url: http://{}:{}/healthz
+  interval: 2s
+  timeout: 45s
+migrations:
+  command: ["bin/rails", "db:migrate"]
+  env:
+    RAILS_ENV: "production"
+secrets:
+  - RAILS_MASTER_KEY
+  - SECRET_KEY_BASE
+"#,
+        opts.app,
+        opts.image,
+        opts.domain,
+        opts.port,
+        opts.resolver,
+        opts.network,
+        opts.app,
+        opts.port
+    );
+
+    let hl_yml_path = dir.join("hl.yml");
+    fs::write(&hl_yml_path, hl_yml).await?;
+
     let unit = write_unit(&opts.app).await?;
 
     log(&format!(
-        "wrote {} and {}",
+        "wrote {}, {} and {}",
         compose_path.display(),
+        hl_yml_path.display(),
         env_path.display()
     ));
     ok(&format!("created {} (will be enabled on first deploy)", unit));
