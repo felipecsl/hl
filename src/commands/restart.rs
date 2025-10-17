@@ -5,6 +5,7 @@ use hl::{log::*, systemd::restart_service};
 #[derive(Args)]
 pub struct RestartArgs {
     /// Application name
+    #[arg(long)]
     pub app: String,
 }
 
