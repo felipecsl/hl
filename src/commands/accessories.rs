@@ -182,10 +182,10 @@ networks:
     Ok(())
 }
 
-/// Generate a random strong password
+/// Generate a random strong password (alphanumeric only to avoid URI encoding issues)
 fn generate_password() -> String {
     const CHARSET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     const PASSWORD_LEN: usize = 32;
     let mut rng = rand::rng();
 

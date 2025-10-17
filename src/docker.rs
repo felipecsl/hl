@@ -146,12 +146,12 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("docker compose pull failed with status: {}", status);
     }
 
-    debug("restarting services with docker compose up -d");
+    debug("restarting service with systemctl");
 
-    // Restart services
-    let status = Command::new("docker")
-        .args(["compose", "-f", "compose.yml", "up", "-d"])
-        .current_dir(&dir)
+    // Restart service using systemctl
+    let unit = format!("app-{}.service", cfg.app);
+    let status = Command::new("systemctl")
+        .args(["--user", "restart", &unit])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -159,10 +159,10 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("docker compose up failed with status: {}", status);
+        anyhow::bail!("systemctl restart failed with status: {}", status);
     }
 
-    debug("docker compose up completed successfully");
+    debug("service restarted successfully");
 
     Ok(())
 }
