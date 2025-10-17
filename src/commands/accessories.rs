@@ -89,6 +89,7 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
 
   pg:
     image: postgres:{}
+    container_name: {}_pg
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${{POSTGRES_USER}}
@@ -109,7 +110,7 @@ networks:
     external: true
     name: {}
 "#,
-        opts.app, opts.version, network, network, network
+        opts.app, opts.version, opts.app, network, network, network
     );
 
     let postgres_compose_path = dir.join("compose.postgres.yml");

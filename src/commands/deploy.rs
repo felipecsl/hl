@@ -67,6 +67,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     })
     .await?;
 
+    // TODO: This step hangs forever if the database container is not running
+    // Might need to ensure service is running before applying migrations
     log("running migrations");
     run_migrations(&cfg, &tags.sha).await?;
 

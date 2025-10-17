@@ -50,7 +50,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
         r#"services:
   {}:
     image: {}:latest
-    container_name: {},
+    container_name: {}
     restart: unless-stopped
     env_file: [.env]
     networks: [{}]
