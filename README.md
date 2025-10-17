@@ -19,17 +19,19 @@ currently managed by `hl` but may be in the future.
 # Development build
 cargo build
 
-# Optimized release build
+# Release build for linux x86_64
 cross build --target x86_64-unknown-linux-gnu --release
 ```
 
-## Deploying the tool
+## Deploying `hl` to your remote host
 
 ```bash
 scp target/x86_64-unknown-linux-gnu/release/hl host:/home/youruser/.hl/bin/hl
 ```
 
-## Wrapper script
+## `hl` Wrapper script
+
+You can use the script below to conveniently call `hl` on your remote host from your local machine.
 
 ```bash
 #!/usr/bin/env bash

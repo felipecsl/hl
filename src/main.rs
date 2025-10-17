@@ -18,6 +18,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Manage accessories (postgres, redis, etc.)
+    Accessories(commands::accessories::AccessoriesArgs),
     /// Build->push->migrate->restart->health (invoke from post-receive)
     Deploy(commands::deploy::DeployArgs),
     /// Initializes a new app with its configuration files
@@ -36,6 +38,7 @@ async fn main() -> Result<()> {
     set_verbose(cli.verbose);
 
     match cli.command {
+        Commands::Accessories(args) => commands::accessories::execute(args).await?,
         Commands::Deploy(args) => commands::deploy::execute(args).await?,
         Commands::Init(args) => commands::init::execute(args).await?,
         Commands::Rollback(args) => commands::rollback::execute(args).await?,
