@@ -30,6 +30,12 @@ pub async fn write_unit(app: &str) -> Result<String> {
         compose_files.push("compose.postgres.yml".to_string());
     }
 
+    // Check for compose.redis.yml
+    let redis_compose = wd.join("compose.redis.yml");
+    if redis_compose.exists() {
+        compose_files.push("compose.redis.yml".to_string());
+    }
+
     // Build the docker compose command arguments
     let compose_args = compose_files
         .iter()
