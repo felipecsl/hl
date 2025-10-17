@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use hl::config::{app_dir, load_config};
 use hl::log::*;
+use hl::systemd::write_unit;
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -114,10 +115,7 @@ networks:
     let postgres_compose_path = dir.join("compose.postgres.yml");
     fs::write(&postgres_compose_path, compose_postgres).await?;
 
-    ok(&format!(
-        "created {}",
-        postgres_compose_path.display()
-    ));
+    ok(&format!("created {}", postgres_compose_path.display()));
 
     // Update .env file
     let env_path = dir.join(".env");
@@ -169,17 +167,25 @@ networks:
         perms.set_mode(0o600);
         fs::set_permissions(&env_path, perms).await?;
 
-        ok(&format!("updated {} with postgres credentials (chmod 600)", env_path.display()));
+        ok(&format!(
+            "updated {} with postgres credentials (chmod 600)",
+            env_path.display()
+        ));
     } else {
         log("all postgres environment variables already exist in .env");
     }
+
+    // Regenerate the systemd unit to include the new compose.postgres.yml file
+    write_unit(&opts.app).await?;
+    ok("regenerated systemd unit file to include postgres compose file");
 
     Ok(())
 }
 
 /// Generate a random strong password
 fn generate_password() -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const CHARSET: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     const PASSWORD_LEN: usize = 32;
     let mut rng = rand::rng();
 

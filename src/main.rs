@@ -1,7 +1,7 @@
 mod commands;
 
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 use hl::log::set_verbose;
 
 #[derive(Parser)]

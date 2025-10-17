@@ -12,7 +12,10 @@ pub struct BuildPushOptions {
 }
 
 pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
-    debug(&format!("build_and_push: context={}, dockerfile={:?}", opts.context, opts.dockerfile));
+    debug(&format!(
+        "build_and_push: context={}, dockerfile={:?}",
+        opts.context, opts.dockerfile
+    ));
 
     // Verify context directory exists
     let context_path = std::path::Path::new(&opts.context);
@@ -47,7 +50,10 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
 
     args.push(&opts.context);
 
-    debug(&format!("executing docker command: docker {}", args.join(" ")));
+    debug(&format!(
+        "executing docker command: docker {}",
+        args.join(" ")
+    ));
 
     let status = Command::new("docker")
         .args(&args)
@@ -166,15 +172,22 @@ pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
     let env_path = env_file(&cfg.app);
     let env_path_str = env_path.to_string_lossy().to_string();
 
-    debug(&format!("run_migrations: app_dir={}, env_file={}, image={}",
-        dir.display(), env_path.display(), image_tag));
+    debug(&format!(
+        "run_migrations: app_dir={}, env_file={}, image={}",
+        dir.display(),
+        env_path.display(),
+        image_tag
+    ));
 
     if !dir.exists() {
         anyhow::bail!("App directory not found: {}", dir.display());
     }
 
     if !env_path.exists() {
-        debug(&format!("Warning: .env file not found at: {}", env_path.display()));
+        debug(&format!(
+            "Warning: .env file not found at: {}",
+            env_path.display()
+        ));
     }
 
     let mut args = vec!["run", "--rm"];
@@ -205,7 +218,10 @@ pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
         args.push(cmd_part);
     }
 
-    debug(&format!("executing migrations with docker command: docker {}", args.join(" ")));
+    debug(&format!(
+        "executing migrations with docker command: docker {}",
+        args.join(" ")
+    ));
 
     let status = Command::new("docker")
         .args(&args)

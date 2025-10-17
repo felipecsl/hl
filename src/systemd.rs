@@ -10,11 +10,32 @@ pub async fn write_unit(app: &str) -> Result<String> {
     let unit = format!("app-{}.service", app);
     let wd = app_dir(app);
 
-    debug(&format!("write_unit: app={}, unit={}, working_directory={}", app, unit, wd.display()));
+    debug(&format!(
+        "write_unit: app={}, unit={}, working_directory={}",
+        app,
+        unit,
+        wd.display()
+    ));
 
     if !wd.exists() {
         anyhow::bail!("App directory not found: {}", wd.display());
     }
+
+    // Build the compose file list
+    let mut compose_files = vec!["compose.yml".to_string()];
+
+    // Check for compose.postgres.yml
+    let postgres_compose = wd.join("compose.postgres.yml");
+    if postgres_compose.exists() {
+        compose_files.push("compose.postgres.yml".to_string());
+    }
+
+    // Build the docker compose command arguments
+    let compose_args = compose_files
+        .iter()
+        .map(|f| format!("-f {}", f))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let text = format!(
         r#"[Unit]
@@ -27,15 +48,16 @@ RemainAfterExit=yes
 WorkingDirectory={wd}
 # Wait until the Docker daemon/socket is up
 ExecStartPre=/bin/sh -c 'until /usr/bin/docker info >/dev/null 2>&1; do sleep 1; done'
-ExecStart=/usr/bin/docker compose -f compose.yml up -d
-ExecStop=/usr/bin/docker compose -f compose.yml down
+ExecStart=/usr/bin/docker compose {compose_args} up -d
+ExecStop=/usr/bin/docker compose {compose_args} down
 TimeoutStartSec=0
 
 [Install]
 WantedBy=default.target
 "#,
         app = app,
-        wd = wd.display()
+        wd = wd.display(),
+        compose_args = compose_args
     );
 
     // Get the user's home directory
@@ -68,7 +90,10 @@ WantedBy=default.target
         .await?;
 
     if !status.success() {
-        anyhow::bail!("systemctl --user daemon-reload failed with status: {}", status);
+        anyhow::bail!(
+            "systemctl --user daemon-reload failed with status: {}",
+            status
+        );
     }
 
     debug("systemd unit written and daemon reloaded successfully");

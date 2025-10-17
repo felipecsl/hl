@@ -1,6 +1,6 @@
-use hl::config::{app_dir, env_file};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use hl::config::{app_dir, env_file};
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
@@ -62,9 +62,7 @@ async fn set_secrets(app: &str, pairs: Vec<String>) -> Result<()> {
 
     // Update with new pairs
     for pair in pairs {
-        let pos = pair
-            .find('=')
-            .context(format!("bad pair: {}", pair))?;
+        let pos = pair.find('=').context(format!("bad pair: {}", pair))?;
         if pos < 1 {
             anyhow::bail!("bad pair: {}", pair);
         }

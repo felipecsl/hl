@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::log::debug;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
@@ -17,7 +17,10 @@ use tokio::process::Command;
 /// # Returns
 /// Path to the temporary directory containing the exported commit
 pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
-    debug(&format!("export_commit: repo_path={}, sha={}", repo_path, sha));
+    debug(&format!(
+        "export_commit: repo_path={}, sha={}",
+        repo_path, sha
+    ));
 
     // Check if the git repository exists
     let repo_path_buf = PathBuf::from(repo_path);
@@ -38,7 +41,10 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
     debug(&format!("created temp dir: {}", tmpdir.display()));
 
     // Spawn git archive process
-    debug(&format!("spawning git archive command: git --git-dir {} archive {}", repo_path, sha));
+    debug(&format!(
+        "spawning git archive command: git --git-dir {} archive {}",
+        repo_path, sha
+    ));
 
     let mut git_archive = Command::new("git")
         .arg("--git-dir")
@@ -48,10 +54,16 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .context(format!("Failed to spawn git archive (repo: {}, sha: {})", repo_path, sha))?;
+        .context(format!(
+            "Failed to spawn git archive (repo: {}, sha: {})",
+            repo_path, sha
+        ))?;
 
     // Spawn tar extract process
-    debug(&format!("spawning tar extract command: tar -xC {}", tmpdir.display()));
+    debug(&format!(
+        "spawning tar extract command: tar -xC {}",
+        tmpdir.display()
+    ));
 
     let mut tar_extract = Command::new("tar")
         .arg("-xC")
@@ -60,7 +72,10 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .context(format!("Failed to spawn tar extract (target: {})", tmpdir.display()))?;
+        .context(format!(
+            "Failed to spawn tar extract (target: {})",
+            tmpdir.display()
+        ))?;
 
     debug("git archive and tar extract processes spawned successfully");
 
@@ -69,9 +84,7 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
         (git_archive.stdout.take(), tar_extract.stdin.take())
     {
         tokio::spawn(async move {
-            tokio::io::copy(&mut git_stdout, &mut tar_stdin)
-                .await
-                .ok();
+            tokio::io::copy(&mut git_stdout, &mut tar_stdin).await.ok();
             tar_stdin.shutdown().await.ok();
         });
     }
@@ -84,7 +97,10 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
         .await
         .context("Failed to wait for git archive")?;
 
-    debug(&format!("git archive completed with status: {}", git_status));
+    debug(&format!(
+        "git archive completed with status: {}",
+        git_status
+    ));
 
     debug("waiting for tar extract to complete...");
 
@@ -93,17 +109,33 @@ pub async fn export_commit(repo_path: &str, sha: &str) -> Result<PathBuf> {
         .await
         .context("Failed to wait for tar extract")?;
 
-    debug(&format!("tar extract completed with status: {}", tar_status));
+    debug(&format!(
+        "tar extract completed with status: {}",
+        tar_status
+    ));
 
     if !git_status.success() {
-        anyhow::bail!("git archive failed with status: {} (repo: {}, sha: {})", git_status, repo_path, sha);
+        anyhow::bail!(
+            "git archive failed with status: {} (repo: {}, sha: {})",
+            git_status,
+            repo_path,
+            sha
+        );
     }
 
     if !tar_status.success() {
-        anyhow::bail!("tar extract failed with status: {} (target: {})", tar_status, tmpdir.display());
+        anyhow::bail!(
+            "tar extract failed with status: {} (target: {})",
+            tar_status,
+            tmpdir.display()
+        );
     }
 
-    debug(&format!("successfully exported commit {} to {}", sha, tmpdir.display()));
+    debug(&format!(
+        "successfully exported commit {} to {}",
+        sha,
+        tmpdir.display()
+    ));
 
     Ok(tmpdir)
 }

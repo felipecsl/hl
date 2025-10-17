@@ -1,6 +1,6 @@
-use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*};
 use anyhow::Result;
 use clap::Args;
+use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*};
 
 #[derive(Args)]
 pub struct RollbackArgs {

@@ -1,7 +1,7 @@
-use hl::config::{hl_git_root, home_dir};
-use hl::{config::app_dir, log::*, systemd::write_unit};
 use anyhow::Result;
 use clap::Args;
+use hl::config::{hl_git_root, home_dir};
+use hl::{config::app_dir, log::*, systemd::write_unit};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tokio::fs;
@@ -127,7 +127,10 @@ secrets:
         hl_yml_path.display(),
         env_path.display()
     ));
-    ok(&format!("created {} (will be enabled on first deploy)", unit));
+    ok(&format!(
+        "created {} (will be enabled on first deploy)",
+        unit
+    ));
 
     // Create bare git repository
     let home = home_dir().to_string_lossy().to_string();

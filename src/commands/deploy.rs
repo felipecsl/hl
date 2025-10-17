@@ -1,6 +1,13 @@
-use hl::{config::{hl_git_root, load_config}, docker::*, git::export_commit, health::wait_for_healthy, log::*, systemd::enable_service};
 use anyhow::Result;
 use clap::Args;
+use hl::{
+    config::{hl_git_root, load_config},
+    docker::*,
+    git::export_commit,
+    health::wait_for_healthy,
+    log::*,
+    systemd::enable_service,
+};
 
 #[derive(Args)]
 pub struct DeployArgs {
@@ -77,7 +84,11 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
     // Clean up the temporary worktree
     if let Err(e) = tokio::fs::remove_dir_all(&worktree).await {
-        eprintln!("Warning: failed to cleanup worktree at {}: {}", worktree.display(), e);
+        eprintln!(
+            "Warning: failed to cleanup worktree at {}: {}",
+            worktree.display(),
+            e
+        );
     }
 
     ok("deploy complete");

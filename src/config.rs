@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::log::debug;
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -106,7 +106,10 @@ pub async fn load_config(app: &str) -> Result<HLConfig> {
     let config: HLConfig = serde_yaml::from_str(&content)
         .context(format!("Failed to parse config file: {}", path.display()))?;
 
-    debug(&format!("successfully loaded config for app: {}", config.app));
+    debug(&format!(
+        "successfully loaded config for app: {}",
+        config.app
+    ));
 
     Ok(config)
 }
