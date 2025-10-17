@@ -1,4 +1,6 @@
-# `hl` - Homelab Deploy Tool
+# `hl` your homelab app CLI
+
+Goal: A CLI to spin up, manage, and monitor apps on a homelab server.
 
 ## Building
 
@@ -12,23 +14,25 @@ cross build --target x86_64-unknown-linux-gnu --release
 
 ## Deploying the tool
 
-```
-scp target/x86_64-unknown-linux-gnu/release/hl felipecsl-ubuntu-25:/home/felipecsl/.hl/bin/hl
+```bash
+scp target/x86_64-unknown-linux-gnu/release/hl host:/home/felipecsl/.hl/bin/hl
 ```
 
 ## Usage
 
 ```bash
-# Deploy an application
-hl deploy --app myapp --sha abc123def --branch master
-
 # Initialize a new app
 hl init --app myapp --image ghcr.io/user/myapp --domain app.example.com --port 3000
 
-# Rollback to a previous version
-hl rollback myapp abc123d
+git remote add production ssh://user@host/path/to/myapp.git
 
-# Manage secrets
+# Deploying an application happens automatically upon git push
+git push production master
+
+# Rollback to a previous version
+hl rollback myapp gitsha
+
+# Managing secrets
 hl secrets set myapp KEY=value
 hl secrets ls myapp
 ```
