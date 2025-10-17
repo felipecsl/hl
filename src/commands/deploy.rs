@@ -1,4 +1,4 @@
-use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*, systemd::enable_service};
+use hl::{config::{hl_git_root, load_config}, docker::*, git::export_commit, health::wait_for_healthy, log::*, systemd::enable_service};
 use anyhow::Result;
 use clap::Args;
 
@@ -15,17 +15,21 @@ pub struct DeployArgs {
     /// Git branch name
     #[arg(long, default_value = "master")]
     pub branch: String,
-
-    /// Build context directory
-    #[arg(long, default_value = ".")]
-    pub context: String,
-
-    /// Dockerfile path
-    #[arg(long, default_value = "Dockerfile")]
-    pub dockerfile: String,
 }
 
 pub async fn execute(opts: DeployArgs) -> Result<()> {
+    // Export the commit to a temporary directory
+    let repo_path = hl_git_root(&opts.app)
+        .to_str()
+        .expect("repo path is not valid UTF-8")
+        .to_string();
+
+    debug(&format!("repository path: {}", repo_path));
+
+    let worktree = export_commit(&repo_path, &opts.sha).await?;
+
+    debug(&format!("exported worktree to: {}", worktree.display()));
+
     let cfg = load_config(&opts.app).await?;
     let tags = tag_for(&cfg, &opts.sha, &opts.branch);
 
@@ -35,9 +39,22 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
         opts.branch,
         &opts.sha[..7.min(opts.sha.len())]
     ));
+
+    // Build using the exported worktree
+    let dockerfile = worktree.join("Dockerfile");
+
+    debug(&format!("dockerfile path: {}", dockerfile.display()));
+
+    // Check if Dockerfile exists
+    if !dockerfile.exists() {
+        anyhow::bail!("Dockerfile not found at: {}", dockerfile.display());
+    }
+
+    debug(&format!("build context: {}", worktree.display()));
+
     build_and_push(BuildPushOptions {
-        context: opts.context,
-        dockerfile: Some(opts.dockerfile),
+        context: worktree.to_string_lossy().to_string(),
+        dockerfile: Some(dockerfile.to_string_lossy().to_string()),
         tags: vec![tags.sha.clone(), tags.branch_sha, tags.latest.clone()],
         platforms: Some(cfg.platforms.clone()),
     })
@@ -57,6 +74,11 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
     log("waiting for health");
     wait_for_healthy(&cfg.health.url, &cfg.health.timeout, &cfg.health.interval).await?;
+
+    // Clean up the temporary worktree
+    if let Err(e) = tokio::fs::remove_dir_all(&worktree).await {
+        eprintln!("Warning: failed to cleanup worktree at {}: {}", worktree.display(), e);
+    }
 
     ok("deploy complete");
     Ok(())

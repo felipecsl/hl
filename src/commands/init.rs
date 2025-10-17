@@ -1,3 +1,4 @@
+use hl::config::{hl_git_root, home_dir};
 use hl::{config::app_dir, log::*, systemd::write_unit};
 use anyhow::Result;
 use clap::Args;
@@ -30,14 +31,6 @@ pub struct InitArgs {
     /// ACME resolver name
     #[arg(long, default_value = "myresolver")]
     pub resolver: String,
-
-    /// Build context directory
-    #[arg(long, default_value = ".")]
-    pub context: String,
-
-    /// Dockerfile path
-    #[arg(long, default_value = "Dockerfile")]
-    pub dockerfile: String,
 }
 
 pub async fn execute(opts: InitArgs) -> Result<()> {
@@ -97,9 +90,10 @@ networks:
     ok(&format!("created {} (will be enabled on first deploy)", unit));
 
     // Create bare git repository
-    let home = std::env::var("HOME")?;
-    let git_dir = Path::new(&home).join("prj/git").join(format!("{}.git", opts.app));
-    fs::create_dir_all(&git_dir).await?;
+    let home = home_dir().to_string_lossy().to_string();
+    let git_root = hl_git_root(opts.app.as_str());
+    let git_dir = git_root.to_string_lossy().to_string();
+    fs::create_dir_all(&git_root).await?;
 
     // Initialize bare git repository
     let status = tokio::process::Command::new("git")
@@ -114,7 +108,7 @@ networks:
     }
 
     // Create post-receive hook
-    let hooks_dir = git_dir.join("hooks");
+    let hooks_dir = git_root.join("hooks");
     let hook_path = hooks_dir.join("post-receive");
 
     let hook_content = format!(
@@ -124,10 +118,10 @@ while read -r oldrev newrev refname; do
   case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
     *) continue;;
   esac
-  hl deploy --app {} --sha "$newrev" --branch "$branch" --context "{}" --dockerfile "{}"
+  {}/.hl/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
 done
 "#,
-        opts.app, opts.context, opts.dockerfile
+        home, opts.app
     );
 
     fs::write(&hook_path, hook_content).await?;
@@ -137,7 +131,23 @@ done
     perms.set_mode(0o755);
     fs::set_permissions(&hook_path, perms).await?;
 
-    ok(&format!("created git repository at {}", git_dir.display()));
+    ok(&format!("created git repository at {}", &git_dir));
+
+    // Get current user and hostname for git remote command
+    let username = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+    let hostname = std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "hostname".to_string());
+
+    log(&format!(
+        "To deploy from your local machine, add a git remote:\n  git remote add production ssh://{}@{}{}",
+        username,
+        hostname,
+        git_dir
+    ));
 
     Ok(())
 }

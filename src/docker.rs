@@ -1,4 +1,5 @@
 use crate::config::{app_dir, env_file, HLConfig};
+use crate::log::debug;
 use anyhow::Result;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -11,6 +12,22 @@ pub struct BuildPushOptions {
 }
 
 pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
+    debug(&format!("build_and_push: context={}, dockerfile={:?}", opts.context, opts.dockerfile));
+
+    // Verify context directory exists
+    let context_path = std::path::Path::new(&opts.context);
+    if !context_path.exists() {
+        anyhow::bail!("Build context directory not found: {}", opts.context);
+    }
+
+    // Verify dockerfile exists if specified
+    if let Some(ref dockerfile) = opts.dockerfile {
+        let dockerfile_path = std::path::Path::new(dockerfile);
+        if !dockerfile_path.exists() {
+            anyhow::bail!("Dockerfile not found: {}", dockerfile);
+        }
+    }
+
     let mut args = vec!["buildx", "build", "--push"];
 
     if let Some(platforms) = &opts.platforms {
@@ -30,6 +47,8 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
 
     args.push(&opts.context);
 
+    debug(&format!("executing docker command: docker {}", args.join(" ")));
+
     let status = Command::new("docker")
         .args(&args)
         .stdin(Stdio::inherit())
@@ -39,8 +58,10 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("docker build failed");
+        anyhow::bail!("docker build failed with status: {}", status);
     }
+
+    debug("docker build completed successfully");
 
     Ok(())
 }
@@ -92,6 +113,19 @@ pub async fn retag_latest(image: &str, from_tag: &str) -> Result<()> {
 pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
     let dir = app_dir(&cfg.app);
 
+    debug(&format!("restart_compose: app_dir={}", dir.display()));
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    let compose_file = dir.join("compose.yml");
+    if !compose_file.exists() {
+        anyhow::bail!("compose.yml not found at: {}", compose_file.display());
+    }
+
+    debug("pulling latest images with docker compose");
+
     // Pull latest images
     let status = Command::new("docker")
         .args(["compose", "-f", "compose.yml", "pull"])
@@ -103,8 +137,10 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("docker compose pull failed");
+        anyhow::bail!("docker compose pull failed with status: {}", status);
     }
+
+    debug("restarting services with docker compose up -d");
 
     // Restart services
     let status = Command::new("docker")
@@ -117,8 +153,10 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("docker compose up failed");
+        anyhow::bail!("docker compose up failed with status: {}", status);
     }
+
+    debug("docker compose up completed successfully");
 
     Ok(())
 }
@@ -127,6 +165,17 @@ pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
     let dir = app_dir(&cfg.app);
     let env_path = env_file(&cfg.app);
     let env_path_str = env_path.to_string_lossy().to_string();
+
+    debug(&format!("run_migrations: app_dir={}, env_file={}, image={}",
+        dir.display(), env_path.display(), image_tag));
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    if !env_path.exists() {
+        debug(&format!("Warning: .env file not found at: {}", env_path.display()));
+    }
 
     let mut args = vec!["run", "--rm"];
 
@@ -156,6 +205,8 @@ pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
         args.push(cmd_part);
     }
 
+    debug(&format!("executing migrations with docker command: docker {}", args.join(" ")));
+
     let status = Command::new("docker")
         .args(&args)
         .current_dir(&dir)
@@ -166,8 +217,10 @@ pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("migrations failed");
+        anyhow::bail!("migrations failed with status: {}", status);
     }
+
+    debug("migrations completed successfully");
 
     Ok(())
 }

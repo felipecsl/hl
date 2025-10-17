@@ -1,4 +1,5 @@
 use crate::config::app_dir;
+use crate::log::debug;
 use anyhow::Result;
 use std::env;
 use std::process::Stdio;
@@ -8,6 +9,12 @@ use tokio::process::Command;
 pub async fn write_unit(app: &str) -> Result<String> {
     let unit = format!("app-{}.service", app);
     let wd = app_dir(app);
+
+    debug(&format!("write_unit: app={}, unit={}, working_directory={}", app, unit, wd.display()));
+
+    if !wd.exists() {
+        anyhow::bail!("App directory not found: {}", wd.display());
+    }
 
     let text = format!(
         r#"[Unit]
@@ -38,11 +45,18 @@ WantedBy=default.target
 
     let systemd_user_dir = format!("{}/.config/systemd/user", home);
 
+    debug(&format!("systemd user directory: {}", systemd_user_dir));
+
     // Ensure the directory exists
     fs::create_dir_all(&systemd_user_dir).await?;
 
     let unit_path = format!("{}/{}", systemd_user_dir, unit);
+
+    debug(&format!("writing systemd unit file to: {}", unit_path));
+
     fs::write(&unit_path, text).await?;
+
+    debug("reloading systemd daemon");
 
     // Reload systemd daemon
     let status = Command::new("systemctl")
@@ -54,14 +68,18 @@ WantedBy=default.target
         .await?;
 
     if !status.success() {
-        anyhow::bail!("systemctl --user daemon-reload failed");
+        anyhow::bail!("systemctl --user daemon-reload failed with status: {}", status);
     }
+
+    debug("systemd unit written and daemon reloaded successfully");
 
     Ok(unit)
 }
 
 pub async fn enable_service(app: &str) -> Result<()> {
     let unit = format!("app-{}.service", app);
+
+    debug(&format!("enabling systemd service: {}", unit));
 
     // Enable and start the service (idempotent operation)
     let status = Command::new("systemctl")
@@ -73,8 +91,10 @@ pub async fn enable_service(app: &str) -> Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("systemctl --user enable failed");
+        anyhow::bail!("systemctl --user enable failed with status: {}", status);
     }
+
+    debug("systemd service enabled successfully");
 
     Ok(())
 }

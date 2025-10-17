@@ -1,12 +1,24 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use crate::log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
 
 pub fn hl_root() -> PathBuf {
+    PathBuf::from(home_dir()).join("prj").join("apps")
+}
+
+pub fn home_dir() -> PathBuf {
     let home = std::env::var("HOME").expect("HOME environment variable not set");
-    PathBuf::from(home).join("prj").join("apps")
+    PathBuf::from(home)
+}
+
+pub fn hl_git_root(app: &str) -> PathBuf {
+    PathBuf::from(home_dir())
+        .join("prj")
+        .join("git")
+        .join(format!("{}.git", app))
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -80,9 +92,22 @@ impl Default for MigrationsConfig {
 }
 
 pub async fn load_config(app: &str) -> Result<HLConfig> {
-    let path = hl_root().join(app).join("homelab.yml");
-    let content = fs::read_to_string(&path).await?;
-    let config: HLConfig = serde_yaml::from_str(&content)?;
+    let path = app_dir(app).join("homelab.yml");
+    debug(&format!("loading config from: {}", path.display()));
+
+    if !path.exists() {
+        anyhow::bail!("Config file not found at: {}", path.display());
+    }
+
+    let content = fs::read_to_string(&path)
+        .await
+        .context(format!("Failed to read config file: {}", path.display()))?;
+
+    let config: HLConfig = serde_yaml::from_str(&content)
+        .context(format!("Failed to parse config file: {}", path.display()))?;
+
+    debug(&format!("successfully loaded config for app: {}", config.app));
+
     Ok(config)
 }
 

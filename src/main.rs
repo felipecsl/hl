@@ -2,11 +2,16 @@ mod commands;
 
 use clap::{Parser, Subcommand};
 use anyhow::Result;
+use hl::log::set_verbose;
 
 #[derive(Parser)]
 #[command(name = "hl")]
 #[command(about = "Homelab deploy toolbox", long_about = None)]
 struct Cli {
+    /// Enable verbose/debug logging
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -26,6 +31,9 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Set verbose mode
+    set_verbose(cli.verbose);
 
     match cli.command {
         Commands::Deploy(args) => commands::deploy::execute(args).await?,
