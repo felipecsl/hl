@@ -24,7 +24,7 @@ pub async fn write_unit(app: &str) -> Result<String> {
     // Build the compose file list
     let mut compose_files = vec!["compose.yml".to_string()];
     // Valid accessory compose files (easy to expand in the future)
-    let valid_accessories = vec!["compose.postgres.yml", "compose.redis.yml"];
+    let valid_accessories = ["compose.postgres.yml", "compose.redis.yml"];
     // Find valid accessory files in the directory
     let mut entries = fs::read_dir(&wd).await?;
     let mut accessory_files = Vec::new();
