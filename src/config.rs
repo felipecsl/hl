@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tokio::fs;
 
 pub fn hl_root() -> PathBuf {
-    PathBuf::from(home_dir()).join("prj").join("apps")
+    home_dir().join("prj").join("apps")
 }
 
 pub fn home_dir() -> PathBuf {
@@ -15,7 +15,7 @@ pub fn home_dir() -> PathBuf {
 }
 
 pub fn hl_git_root(app: &str) -> PathBuf {
-    PathBuf::from(home_dir())
+    home_dir()
         .join("prj")
         .join("git")
         .join(format!("{}.git", app))

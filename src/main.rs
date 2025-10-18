@@ -26,6 +26,8 @@ enum Commands {
     Init(commands::init::InitArgs),
     /// Stream logs from a service
     Logs(commands::logs::LogsArgs),
+    /// Restart a service using systemctl
+    Restart(commands::restart::RestartArgs),
     /// Retag :latest to a previous sha and restart (health-gated)
     Rollback(commands::rollback::RollbackArgs),
     /// Manage .env secrets
@@ -44,6 +46,7 @@ async fn main() -> Result<()> {
         Commands::Deploy(args) => commands::deploy::execute(args).await?,
         Commands::Init(args) => commands::init::execute(args).await?,
         Commands::Logs(args) => commands::logs::execute(args).await?,
+        Commands::Restart(args) => commands::restart::execute(args).await?,
         Commands::Rollback(args) => commands::rollback::execute(args).await?,
         Commands::Secrets(args) => commands::secrets::execute(args).await?,
     }

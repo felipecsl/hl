@@ -23,12 +23,25 @@ pub async fn write_unit(app: &str) -> Result<String> {
 
     // Build the compose file list
     let mut compose_files = vec!["compose.yml".to_string()];
+    // Valid accessory compose files (easy to expand in the future)
+    let valid_accessories = ["compose.postgres.yml", "compose.redis.yml"];
+    // Find valid accessory files in the directory
+    let mut entries = fs::read_dir(&wd).await?;
+    let mut accessory_files = Vec::new();
 
-    // Check for compose.postgres.yml
-    let postgres_compose = wd.join("compose.postgres.yml");
-    if postgres_compose.exists() {
-        compose_files.push("compose.postgres.yml".to_string());
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            // Check if this is one of our valid accessory files
+            if valid_accessories.contains(&filename) {
+                accessory_files.push(filename.to_string());
+            }
+        }
     }
+
+    // Sort for deterministic ordering
+    accessory_files.sort();
+    compose_files.extend(accessory_files);
 
     // Build the docker compose command arguments
     let compose_args = compose_files
