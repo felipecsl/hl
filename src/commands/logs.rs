@@ -38,7 +38,7 @@ pub async fn execute(args: LogsArgs) -> Result<()> {
 
     // Build compose file list
     let mut compose_args = vec!["-f".to_string(), "compose.yml".to_string()];
-    
+
     // Check for compose.postgres.yml
     let postgres_compose = dir.join("compose.postgres.yml");
     if postgres_compose.exists() {
