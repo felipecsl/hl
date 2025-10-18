@@ -261,7 +261,8 @@ Retags `:latest` to the specified sha, restarts, and health-checks.
 - `hl accessories add <app> postgres [--version <v>] [--user <u>] [--db <name>] [--password <p>]`
   Add Postgres as an accessory and wire `DATABASE_URL`.
 
-_(You may also have helpers like `status`, `logs`, or `doctor` in the future.)_
+- `hl accessories add <app> redis [--version <v>]`
+  Add Redis as an accessory and wire `REDIS_URL`.
 
 ---
 

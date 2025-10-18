@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use hl::config::{hl_git_root, home_dir};
+use hl::docker::write_base_compose_file;
 use hl::{config::app_dir, log::*, systemd::write_unit};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -46,41 +47,8 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
         fs::write(&env_path, env_content).await?;
     }
 
-    let compose = format!(
-        r#"services:
-  {}:
-    image: {}:latest
-    container_name: {}
-    restart: unless-stopped
-    env_file: [.env]
-    networks: [{}]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{}.rule=Host(`${{{}}}`)"
-      - "traefik.http.routers.{}.entrypoints=websecure"
-      - "traefik.http.routers.{}.tls.certresolver={}"
-      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}"
-networks:
-  {}:
-    external: true
-    name: {}
-"#,
-        opts.app,
-        opts.image,
-        opts.app,
-        opts.network,
-        opts.app,
-        "DOMAIN",
-        opts.app,
-        opts.app,
-        opts.resolver,
-        opts.app,
-        opts.network,
-        opts.network
-    );
-
+    write_base_compose_file(&dir, &opts.app, &opts.image, &opts.network, &opts.resolver).await?;
     let compose_path = dir.join("compose.yml");
-    fs::write(&compose_path, compose).await?;
 
     // TODO: hl currently makes a bunch of assumptions about the app being deployed:
     // - it's a Rails app and environment is production
