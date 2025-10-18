@@ -23,19 +23,17 @@ pub async fn write_unit(app: &str) -> Result<String> {
 
     // Build the compose file list
     let mut compose_files = vec!["compose.yml".to_string()];
-
-    // Find all compose.*.yml files in the directory
+    // Valid accessory compose files (easy to expand in the future)
+    let valid_accessories = ["compose.postgres.yml", "compose.redis.yml"];
+    // Find valid accessory files in the directory
     let mut entries = fs::read_dir(&wd).await?;
     let mut accessory_files = Vec::new();
 
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            // Match compose.*.yml pattern (but not compose.yml itself)
-            if filename.starts_with("compose.")
-                && filename.ends_with(".yml")
-                && filename != "compose.yml"
-            {
+            // Check if this is one of our valid accessory files
+            if valid_accessories.contains(&filename) {
                 accessory_files.push(filename.to_string());
             }
         }

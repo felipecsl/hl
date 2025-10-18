@@ -1,7 +1,9 @@
 use crate::log::debug;
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
@@ -164,6 +166,102 @@ async fn create_temp_dir(base: &std::path::Path, sha: &str) -> Result<PathBuf> {
     anyhow::bail!("Failed to create unique temp directory after 100 attempts")
 }
 
+/// Generate the SSH URI for a git repository
+/// Given the git directory path, constructs an SSH URI
+/// using the current user's username and the system's hostname.
+/// # Arguments
+/// * `git_dir` - Path to the git repository
+/// # Returns
+/// SSH URI string in the format: ssh://username@hostname/git_dir
+pub fn repo_remote_uri(git_dir: &str) -> String {
+    let username = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+    let hostname = std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "hostname".to_string());
+    format!("ssh://{}@{}{}", username, hostname, git_dir)
+}
+
+/// Initialize a bare git repository with a post-receive hook
+///
+/// Creates a bare git repository at the specified path and installs a post-receive
+/// hook that triggers `hl deploy` when commits are pushed.
+///
+/// # Arguments
+/// * `git_dir` - Path where the bare repository should be created
+/// * `app_name` - Name of the application (used in hook script)
+/// * `home_dir` - Home directory path (used to locate hl binary)
+///
+/// # Returns
+/// Ok(()) on success, or an error if repository creation or hook installation fails
+pub async fn init_bare_repo(git_dir: &Path, app_name: &str, home_dir: &str) -> Result<()> {
+    debug(&format!(
+        "initializing bare git repository at: {}",
+        git_dir.display()
+    ));
+
+    // Create parent directory if needed
+    if let Some(parent) = git_dir.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .context("Failed to create parent directory for git repo")?;
+    }
+
+    // Initialize bare git repository
+    let status = Command::new("git")
+        .arg("init")
+        .arg("--bare")
+        .arg(git_dir)
+        .status()
+        .await
+        .context("Failed to run git init")?;
+
+    if !status.success() {
+        anyhow::bail!("git init failed with status: {}", status);
+    }
+
+    debug("bare git repository initialized successfully");
+
+    // Create post-receive hook
+    let hooks_dir = git_dir.join("hooks");
+    let hook_path = hooks_dir.join("post-receive");
+
+    let hook_content = format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+while read -r oldrev newrev refname; do
+  case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
+    *) continue;;
+  esac
+  {}/.hl/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
+done
+"#,
+        home_dir, app_name
+    );
+
+    fs::write(&hook_path, hook_content)
+        .await
+        .context("Failed to write post-receive hook")?;
+
+    debug("post-receive hook written");
+
+    // Make hook executable
+    let mut perms = fs::metadata(&hook_path)
+        .await
+        .context("Failed to read hook metadata")?
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&hook_path, perms)
+        .await
+        .context("Failed to set hook permissions")?;
+
+    debug("post-receive hook made executable");
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +277,51 @@ mod tests {
 
         // Cleanup
         tokio::fs::remove_dir(&tmpdir).await.ok();
+    }
+
+    #[tokio::test]
+    async fn test_init_bare_repo() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let base = std::env::temp_dir();
+        let git_dir = base.join(format!("test-bare-repo-{}", rand::random::<u32>()));
+        let app_name = "testapp";
+        let home_dir = "/home/testuser";
+
+        init_bare_repo(&git_dir, app_name, home_dir).await.unwrap();
+
+        // Assert that the git directory was created
+        assert!(git_dir.exists());
+
+        // Assert that it's a valid git repository (has refs, objects, HEAD)
+        assert!(git_dir.join("refs").exists());
+        assert!(git_dir.join("objects").exists());
+        assert!(git_dir.join("HEAD").exists());
+
+        // Assert that the post-receive hook exists and is executable
+        let hook_path = git_dir.join("hooks").join("post-receive");
+        assert!(hook_path.exists());
+
+        let hook_metadata = tokio::fs::metadata(&hook_path).await.unwrap();
+        let permissions = hook_metadata.permissions();
+        assert_eq!(permissions.mode() & 0o111, 0o111); // Check executable bits
+
+        let hook_contents = tokio::fs::read_to_string(&hook_path).await.unwrap();
+        let expected_hook = format!(
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+while read -r oldrev newrev refname; do
+  case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
+    *) continue;;
+  esac
+  {}/.hl/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
+done
+"#,
+            home_dir, app_name
+        );
+        assert_eq!(hook_contents, expected_hook);
+
+        // Cleanup
+        tokio::fs::remove_dir_all(&git_dir).await.ok();
     }
 }
