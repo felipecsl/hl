@@ -61,16 +61,20 @@ async fn execute_add(opts: AddArgs) -> Result<()> {
     }
 }
 
-async fn add_postgres(opts: AddArgs) -> Result<()> {
-    let dir = app_dir(&opts.app);
-
-    // Verify app directory exists
+/// Verify that the app directory exists
+fn ensure_app_dir_exists(app: &str) -> Result<std::path::PathBuf> {
+    let dir = app_dir(app);
     if !dir.exists() {
         anyhow::bail!(
             "app directory does not exist: {}. Run 'hl init' first.",
             dir.display()
         );
     }
+    Ok(dir)
+}
+
+async fn add_postgres(opts: AddArgs) -> Result<()> {
+    let dir = ensure_app_dir_exists(&opts.app)?;
 
     // Set defaults
     let version = opts.version.unwrap_or_else(|| "17".to_string());
@@ -202,15 +206,7 @@ fn generate_password() -> String {
 }
 
 async fn add_redis(opts: AddArgs) -> Result<()> {
-    let dir = app_dir(&opts.app);
-
-    // Verify app directory exists
-    if !dir.exists() {
-        anyhow::bail!(
-            "app directory does not exist: {}. Run 'hl init' first.",
-            dir.display()
-        );
-    }
+    let dir = ensure_app_dir_exists(&opts.app)?;
 
     // Set default version
     let version = opts.version.unwrap_or_else(|| "7".to_string());
@@ -270,7 +266,8 @@ networks:
             env_content.push('\n');
         }
 
-        env_content.push_str("REDIS_URL=redis://redis:6379/0\n");
+        let redis_url = format!("REDIS_URL=redis://{}_redis:6379/0\n", opts.app);
+        env_content.push_str(&redis_url);
 
         // Write the updated content
         fs::write(&env_path, &env_content).await?;
