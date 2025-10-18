@@ -4,8 +4,8 @@ use crate::systemd::restart_service;
 use anyhow::Result;
 use std::path::Path;
 use std::process::Stdio;
-use tokio::process::Command;
 use tokio::fs;
+use tokio::process::Command;
 
 pub struct BuildPushOptions {
     pub context: String,
@@ -273,18 +273,7 @@ networks:
     external: true
     name: {}
 "#,
-        app,
-        image,
-        app,
-        network,
-        app,
-        "DOMAIN",
-        app,
-        app,
-        resolver,
-        app,
-        network,
-        network
+        app, image, app, network, app, "DOMAIN", app, app, resolver, app, network, network
     );
     let compose_path = dir.join("compose.yml");
     fs::write(&compose_path, compose).await?;
@@ -326,7 +315,10 @@ networks:
     external: true
     name: traefik_proxy
 "#;
-        assert_eq!(content, expected, "Compose file content should match expected output");
+        assert_eq!(
+            content, expected,
+            "Compose file content should match expected output"
+        );
         Ok(())
     }
 
@@ -364,6 +356,9 @@ networks:
         let result = args.join(" ");
         let expected = "run --rm --env-file /home/user/prj/apps/testapp/.env -e RAILS_ENV=production --network traefik_proxy registry.example.com/testapp:abc1234 bin/rails db:migrate";
 
-        assert_eq!(result, expected, "Migration command should match expected output");
+        assert_eq!(
+            result, expected,
+            "Migration command should match expected output"
+        );
     }
 }
