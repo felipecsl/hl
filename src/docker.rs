@@ -441,8 +441,14 @@ networks:
         let dir_path = temp_dir.path();
 
         let mut processes = HashMap::new();
-        processes.insert("web".to_string(), "bundle exec rails server -p $PORT".to_string());
-        processes.insert("worker".to_string(), "bundle exec sidekiq -C config/sidekiq.yml".to_string());
+        processes.insert(
+            "web".to_string(),
+            "bundle exec rails server -p $PORT".to_string(),
+        );
+        processes.insert(
+            "worker".to_string(),
+            "bundle exec sidekiq -C config/sidekiq.yml".to_string(),
+        );
 
         write_process_compose_files(dir_path, Some(&processes)).await?;
 
@@ -455,7 +461,10 @@ networks:
     <<: *app_base
     command: ["bundle","exec","rails","server","-p","$PORT"]
 "#;
-        assert_eq!(web_content, expected_web, "Web compose content should match");
+        assert_eq!(
+            web_content, expected_web,
+            "Web compose content should match"
+        );
 
         // Check worker compose file
         let worker_path = dir_path.join("compose.worker.yml");
@@ -466,7 +475,10 @@ networks:
     <<: *app_base
     command: ["bundle","exec","sidekiq","-C","config/sidekiq.yml"]
 "#;
-        assert_eq!(worker_content, expected_worker, "Worker compose content should match");
+        assert_eq!(
+            worker_content, expected_worker,
+            "Worker compose content should match"
+        );
 
         Ok(())
     }
@@ -486,7 +498,10 @@ networks:
   web:
     <<: *app_base
 "#;
-        assert_eq!(web_content, expected_web, "Default web compose content should match");
+        assert_eq!(
+            web_content, expected_web,
+            "Default web compose content should match"
+        );
 
         Ok(())
     }
@@ -499,7 +514,10 @@ networks:
     <<: *app_base
     command: ["bundle","exec","sidekiq"]
 "#;
-        assert_eq!(result, expected, "Process compose with command should match");
+        assert_eq!(
+            result, expected,
+            "Process compose with command should match"
+        );
     }
 
     #[test]
@@ -509,20 +527,26 @@ networks:
   web:
     <<: *app_base
 "#;
-        assert_eq!(result, expected, "Process compose without command should match");
+        assert_eq!(
+            result, expected,
+            "Process compose without command should match"
+        );
     }
 
     #[test]
     fn test_generate_process_compose_with_complex_command() {
         let result = generate_process_compose(
             "release",
-            Some(&"bundle exec rake db:migrate db:seed".to_string())
+            Some(&"bundle exec rake db:migrate db:seed".to_string()),
         );
         let expected = r#"services:
   release:
     <<: *app_base
     command: ["bundle","exec","rake","db:migrate","db:seed"]
 "#;
-        assert_eq!(result, expected, "Complex command should be parsed correctly");
+        assert_eq!(
+            result, expected,
+            "Complex command should be parsed correctly"
+        );
     }
 }

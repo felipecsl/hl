@@ -19,7 +19,10 @@ use std::path::Path;
 pub async fn parse_procfile(procfile_path: &Path) -> Result<HashMap<String, String>> {
     let content = tokio::fs::read_to_string(procfile_path)
         .await
-        .context(format!("Failed to read Procfile at {}", procfile_path.display()))?;
+        .context(format!(
+            "Failed to read Procfile at {}",
+            procfile_path.display()
+        ))?;
 
     let mut processes = HashMap::new();
 
@@ -103,7 +106,7 @@ mod tests {
         let mut tmpfile = NamedTempFile::new().unwrap();
         writeln!(tmpfile, "# This is a comment").unwrap();
         writeln!(tmpfile, "web: npm start").unwrap();
-        writeln!(tmpfile, "").unwrap();
+        writeln!(tmpfile, " ").unwrap();
         writeln!(tmpfile, "# Another comment").unwrap();
         writeln!(tmpfile, "worker: node worker.js").unwrap();
 
@@ -111,10 +114,7 @@ mod tests {
 
         assert_eq!(processes.len(), 2);
         assert_eq!(processes.get("web"), Some(&"npm start".to_string()));
-        assert_eq!(
-            processes.get("worker"),
-            Some(&"node worker.js".to_string())
-        );
+        assert_eq!(processes.get("worker"), Some(&"node worker.js".to_string()));
     }
 
     #[tokio::test]
