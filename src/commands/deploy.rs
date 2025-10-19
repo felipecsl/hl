@@ -1,11 +1,12 @@
 use anyhow::Result;
 use clap::Args;
 use hl::{
-    config::{hl_git_root, load_config},
+    config::{app_dir, hl_git_root, load_config},
     docker::*,
     git::export_commit,
     health::wait_for_healthy,
     log::*,
+    procfile::parse_procfile,
     systemd::enable_service,
 };
 
@@ -37,7 +38,27 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
     debug(&format!("exported worktree to: {}", worktree.display()));
 
+    // Check for Procfile and parse if present
+    let procfile_path = worktree.join("Procfile");
+    let processes = if procfile_path.exists() {
+        debug("found Procfile, parsing processes");
+        let procs = parse_procfile(&procfile_path).await?;
+        debug(&format!("parsed {} processes from Procfile", procs.len()));
+        for (name, cmd) in &procs {
+            debug(&format!("  {}: {}", name, cmd));
+        }
+        Some(procs)
+    } else {
+        debug("no Procfile found, using default configuration");
+        None
+    };
+
     let cfg = load_config(&opts.app).await?;
+
+    // Generate process-specific compose files
+    log("generating process compose files");
+    let app_directory = app_dir(&cfg.app);
+    write_process_compose_files(&app_directory, processes.as_ref()).await?;
     let tags = tag_for(&cfg, &opts.sha, &opts.branch);
 
     log(&format!(

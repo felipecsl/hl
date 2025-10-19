@@ -255,7 +255,7 @@ pub async fn write_base_compose_file(
     resolver: &str,
 ) -> Result<()> {
     let compose = format!(
-        r#"services:
+        r#"x-app-base: &app_base:
   {}:
     image: {}:latest
     container_name: {}
@@ -280,6 +280,77 @@ networks:
     Ok(())
 }
 
+/// Generate process-specific compose files from a Procfile
+///
+/// For each process in the map, creates a `compose.{process}.yml` file
+/// with the process name and command. If processes is None, creates a
+/// default `compose.web.yml` with no command override.
+///
+/// # Arguments
+/// * `dir` - Directory where compose files should be written
+/// * `processes` - Optional map of process names to commands from Procfile
+pub async fn write_process_compose_files(
+    dir: &Path,
+    processes: Option<&std::collections::HashMap<String, String>>,
+) -> Result<()> {
+    if let Some(procs) = processes {
+        // Generate a compose file for each process
+        for (process_name, command) in procs {
+            let compose_content = generate_process_compose(process_name, Some(command));
+            let compose_path = dir.join(format!("compose.{}.yml", process_name));
+            fs::write(&compose_path, compose_content).await?;
+            debug(&format!(
+                "wrote process compose file: {}",
+                compose_path.display()
+            ));
+        }
+    } else {
+        // No Procfile, create default web process
+        let compose_content = generate_process_compose("web", None);
+        let compose_path = dir.join("compose.web.yml");
+        fs::write(&compose_path, compose_content).await?;
+        debug(&format!(
+            "wrote default web compose file: {}",
+            compose_path.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Generate the YAML content for a process-specific compose file
+fn generate_process_compose(process_name: &str, command: Option<&String>) -> String {
+    if let Some(cmd) = command {
+        // Parse command string into individual arguments
+        let args = match shell_words::split(cmd) {
+            Ok(parts) => parts,
+            Err(_) => vec![cmd.to_string()],
+        };
+        let args_yaml = args
+            .iter()
+            .map(|arg| format!("\"{}\"", arg))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        format!(
+            r#"services:
+  {}:
+    <<: *app_base
+    command: [{}]
+"#,
+            process_name, args_yaml
+        )
+    } else {
+        // No command override, just use base
+        format!(
+            r#"services:
+  {}:
+    <<: *app_base
+"#,
+            process_name
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,7 +368,7 @@ mod tests {
         let compose_path = dir_path.join("compose.yml");
         assert!(compose_path.exists(), "compose.yml should be created");
         let content = fs::read_to_string(&compose_path).await?;
-        let expected = r#"services:
+        let expected = r#"x-app-base: &app_base:
   testapp:
     image: registry.example.com/testapp:latest
     container_name: testapp
@@ -360,5 +431,98 @@ networks:
             result, expected,
             "Migration command should match expected output"
         );
+    }
+
+    #[tokio::test]
+    async fn test_write_process_compose_files_with_procfile() -> Result<()> {
+        use std::collections::HashMap;
+
+        let temp_dir = TempDir::new()?;
+        let dir_path = temp_dir.path();
+
+        let mut processes = HashMap::new();
+        processes.insert("web".to_string(), "bundle exec rails server -p $PORT".to_string());
+        processes.insert("worker".to_string(), "bundle exec sidekiq -C config/sidekiq.yml".to_string());
+
+        write_process_compose_files(dir_path, Some(&processes)).await?;
+
+        // Check web compose file
+        let web_path = dir_path.join("compose.web.yml");
+        assert!(web_path.exists(), "compose.web.yml should be created");
+        let web_content = fs::read_to_string(&web_path).await?;
+        let expected_web = r#"services:
+  web:
+    <<: *app_base
+    command: ["bundle","exec","rails","server","-p","$PORT"]
+"#;
+        assert_eq!(web_content, expected_web, "Web compose content should match");
+
+        // Check worker compose file
+        let worker_path = dir_path.join("compose.worker.yml");
+        assert!(worker_path.exists(), "compose.worker.yml should be created");
+        let worker_content = fs::read_to_string(&worker_path).await?;
+        let expected_worker = r#"services:
+  worker:
+    <<: *app_base
+    command: ["bundle","exec","sidekiq","-C","config/sidekiq.yml"]
+"#;
+        assert_eq!(worker_content, expected_worker, "Worker compose content should match");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_write_process_compose_files_without_procfile() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let dir_path = temp_dir.path();
+
+        write_process_compose_files(dir_path, None).await?;
+
+        // Check default web compose file
+        let web_path = dir_path.join("compose.web.yml");
+        assert!(web_path.exists(), "compose.web.yml should be created");
+        let web_content = fs::read_to_string(&web_path).await?;
+        let expected_web = r#"services:
+  web:
+    <<: *app_base
+"#;
+        assert_eq!(web_content, expected_web, "Default web compose content should match");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_process_compose_with_command() {
+        let result = generate_process_compose("worker", Some(&"bundle exec sidekiq".to_string()));
+        let expected = r#"services:
+  worker:
+    <<: *app_base
+    command: ["bundle","exec","sidekiq"]
+"#;
+        assert_eq!(result, expected, "Process compose with command should match");
+    }
+
+    #[test]
+    fn test_generate_process_compose_without_command() {
+        let result = generate_process_compose("web", None);
+        let expected = r#"services:
+  web:
+    <<: *app_base
+"#;
+        assert_eq!(result, expected, "Process compose without command should match");
+    }
+
+    #[test]
+    fn test_generate_process_compose_with_complex_command() {
+        let result = generate_process_compose(
+            "release",
+            Some(&"bundle exec rake db:migrate db:seed".to_string())
+        );
+        let expected = r#"services:
+  release:
+    <<: *app_base
+    command: ["bundle","exec","rake","db:migrate","db:seed"]
+"#;
+        assert_eq!(result, expected, "Complex command should be parsed correctly");
     }
 }
