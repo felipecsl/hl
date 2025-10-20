@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use hl::config::{app_dir, load_config, systemd_dir};
-use hl::discovery::{discover_processes, discover_accessories};
-use hl::systemd::{restart_service, write_unit};
+use hl::discovery::{discover_accessories, discover_processes};
 use hl::log::*;
+use hl::systemd::{enable_accessories, reload_systemd_daemon, restart_app_target, write_unit};
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -190,7 +190,7 @@ networks:
     write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include postgres compose file");
 
-    restart_service(&opts.app).await?;
+    restart_app_target(&opts.app).await?;
 
     Ok(())
 }
@@ -294,8 +294,9 @@ networks:
     let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
     write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include redis compose file");
-
-    restart_service(&opts.app).await?;
+    reload_systemd_daemon().await?;
+    enable_accessories(&opts.app).await?;
+    restart_app_target(&opts.app).await?;
 
     Ok(())
 }

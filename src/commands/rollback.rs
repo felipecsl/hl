@@ -1,6 +1,12 @@
 use anyhow::Result;
 use clap::Args;
-use hl::{config::load_config, docker::*, health::wait_for_healthy, log::*};
+use hl::{
+    config::{app_dir, load_config},
+    discovery::{discover_accessories, discover_processes},
+    docker::*,
+    health::wait_for_healthy,
+    log::*,
+};
 
 #[derive(Args)]
 pub struct RollbackArgs {
@@ -20,7 +26,11 @@ pub async fn execute(args: RollbackArgs) -> Result<()> {
     retag_latest(&cfg.image, &from).await?;
 
     log("restarting compose");
-    restart_compose(&cfg).await?;
+    let systemd_dir = hl::config::systemd_dir();
+    let processes = discover_processes(&systemd_dir, &args.app)?;
+    let accessories =
+        discover_accessories(&systemd_dir, &app_dir(&args.app), &args.app, &processes)?;
+    restart_compose(&cfg, &processes, &accessories).await?;
 
     log("waiting for health");
     wait_for_healthy(

@@ -1,6 +1,6 @@
 use crate::config::{app_dir, env_file, HLConfig};
 use crate::log::debug;
-use crate::systemd::restart_service;
+use crate::systemd::restart_app_target;
 use anyhow::Result;
 use std::path::Path;
 use std::process::Stdio;
@@ -119,7 +119,11 @@ pub async fn retag_latest(image: &str, from_tag: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
+pub async fn restart_compose(
+    cfg: &HLConfig,
+    processes: &[String],
+    accessories: &[String],
+) -> Result<()> {
     let dir = app_dir(&cfg.app);
 
     debug(&format!("restart_compose: app_dir={}", dir.display()));
@@ -128,16 +132,19 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("App directory not found: {}", dir.display());
     }
 
-    let compose_file = dir.join("compose.yml");
-    if !compose_file.exists() {
-        anyhow::bail!("compose.yml not found at: {}", compose_file.display());
+    let mut args = vec!["compose".to_string()];
+    args.push("-f".into());
+    args.push("compose.yml".into());
+    for name in processes.iter().chain(accessories.iter()) {
+        args.push("-f".into());
+        args.push(format!("compose.{name}.yml"));
     }
+    args.push("pull".into());
 
     debug("pulling latest images with docker compose");
 
-    // Pull latest images
     let status = Command::new("docker")
-        .args(["compose", "-f", "compose.yml", "pull"])
+        .args(&args)
         .current_dir(&dir)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -149,7 +156,7 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("docker compose pull failed with status: {}", status);
     }
 
-    restart_service(&cfg.app).await?;
+    restart_app_target(&cfg.app).await?;
 
     Ok(())
 }

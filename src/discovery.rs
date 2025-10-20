@@ -1,7 +1,7 @@
+use regex::Regex;
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
-use regex::Regex;
 
 /// Finds process unit names by scanning app-<app>-*.service,
 /// excluding the accessories unit (-acc.service).
@@ -70,22 +70,34 @@ pub fn discover_accessories(
     let base = app_dir.join("compose.yml");
 
     // quick lookup set for process overlay names to exclude
-    let proc_set = known_processes.iter().map(|s| s.as_str()).collect::<std::collections::HashSet<_>>();
+    let proc_set = known_processes
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<std::collections::HashSet<_>>();
 
     for entry in fs::read_dir(app_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path == base { continue; }
-        if path.extension().and_then(|s| s.to_str()) != Some("yml") { continue; }
+        if path == base {
+            continue;
+        }
+        if path.extension().and_then(|s| s.to_str()) != Some("yml") {
+            continue;
+        }
 
         let fname = match path.file_name().and_then(|s| s.to_str()) {
             Some(s) => s,
             None => continue,
         };
         // match compose.<thing>.yml
-        if let Some(stem) = fname.strip_prefix("compose.").and_then(|s| s.strip_suffix(".yml")) {
+        if let Some(stem) = fname
+            .strip_prefix("compose.")
+            .and_then(|s| s.strip_suffix(".yml"))
+        {
             // skip process overlays
-            if proc_set.contains(stem) { continue; }
+            if proc_set.contains(stem) {
+                continue;
+            }
             // treat it as accessory
             accs.push(stem.to_string());
         }
@@ -100,11 +112,16 @@ fn parse_compose_acc_env(unit_content: &str) -> Option<Vec<String>> {
     let re = Regex::new(r#"(?m)^Environment=COMPOSE_ACC=(?:"([^"]+)"|([^\r\n]+))$"#).unwrap();
     let caps = re.captures(unit_content)?;
     let raw = caps.get(1).or_else(|| caps.get(2))?.as_str();
-    let parts = raw.split(':')
+    let parts = raw
+        .split(':')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
-    if parts.is_empty() { None } else { Some(parts) }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts)
+    }
 }
 
 fn extract_accessory_from_overlay_path(path: &str) -> Option<String> {

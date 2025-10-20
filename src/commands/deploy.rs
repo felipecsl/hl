@@ -1,7 +1,14 @@
 use anyhow::Result;
 use clap::Args;
 use hl::{
-    config::{app_dir, hl_git_root, load_config, systemd_dir}, discovery::discover_accessories, docker::*, git::export_commit, health::wait_for_healthy, log::*, procfile::parse_procfile, systemd::{enable_service, write_unit}
+    config::{app_dir, hl_git_root, load_config, systemd_dir},
+    discovery::discover_accessories,
+    docker::*,
+    git::export_commit,
+    health::wait_for_healthy,
+    log::*,
+    procfile::parse_procfile,
+    systemd::{enable_accessories, reload_systemd_daemon, write_unit},
 };
 
 #[derive(Args)]
@@ -57,7 +64,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     let process_names = processes
         .map(|p| p.keys().cloned().collect::<Vec<String>>())
         .unwrap_or_else(|| vec!["web".to_string()]);
-    let accessories = discover_accessories(&systemd_dir, &app_directory, &opts.app, &process_names)?;
+    let accessories =
+        discover_accessories(&systemd_dir, &app_directory, &opts.app, &process_names)?;
     write_unit(&opts.app, &process_names, &accessories).await?;
 
     let tags = tag_for(&cfg, &opts.sha, &opts.branch);
@@ -98,10 +106,11 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     retag_latest(&cfg.image, &tags.sha).await?;
 
     log("enabling systemd service");
-    enable_service(&cfg.app).await?;
+    reload_systemd_daemon().await?;
+    enable_accessories(&cfg.app).await?;
 
-    log("restarting compose");
-    restart_compose(&cfg).await?;
+    log("restarting services");
+    restart_compose(&cfg, &process_names, &accessories).await?;
 
     log("waiting for health");
     wait_for_healthy(

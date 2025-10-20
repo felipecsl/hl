@@ -1,4 +1,5 @@
 pub mod config;
+pub mod discovery;
 pub mod docker;
 pub mod git;
 pub mod health;
@@ -6,4 +7,3 @@ pub mod log;
 pub mod procfile;
 pub mod systemd;
 pub mod units_spec_builder;
-pub mod discovery;
