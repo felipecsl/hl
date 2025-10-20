@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use hl::config::{app_dir, load_config};
-use hl::log::*;
+use hl::config::{app_dir, load_config, systemd_dir};
+use hl::discovery::{discover_processes, discover_accessories};
 use hl::systemd::{restart_service, write_unit};
+use hl::log::*;
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -183,7 +184,10 @@ networks:
     }
 
     // Regenerate the systemd unit to include the new compose.postgres.yml file
-    write_unit(&opts.app).await?;
+    let systemd_dir = systemd_dir();
+    let processes = discover_processes(&systemd_dir, &opts.app)?;
+    let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
+    write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include postgres compose file");
 
     restart_service(&opts.app).await?;
@@ -285,8 +289,10 @@ networks:
         log("REDIS_URL already exists in .env");
     }
 
-    // Regenerate the systemd unit to include the new compose.redis.yml file
-    write_unit(&opts.app).await?;
+    let systemd_dir = systemd_dir();
+    let processes = discover_processes(&systemd_dir, &opts.app)?;
+    let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
+    write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include redis compose file");
 
     restart_service(&opts.app).await?;

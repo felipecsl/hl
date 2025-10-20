@@ -1,13 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use hl::{
-    config::{app_dir, hl_git_root, load_config},
-    docker::*,
-    git::export_commit,
-    health::wait_for_healthy,
-    log::*,
-    procfile::parse_procfile,
-    systemd::enable_service,
+    config::{app_dir, hl_git_root, load_config, systemd_dir}, discovery::discover_accessories, docker::*, git::export_commit, health::wait_for_healthy, log::*, procfile::parse_procfile, systemd::{enable_service, write_unit}
 };
 
 #[derive(Args)]
@@ -59,6 +53,13 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     log("generating process compose files");
     let app_directory = app_dir(&cfg.app);
     write_process_compose_files(&app_directory, processes.as_ref()).await?;
+    let systemd_dir = systemd_dir();
+    let process_names = processes
+        .map(|p| p.keys().cloned().collect::<Vec<String>>())
+        .unwrap_or_else(|| vec!["web".to_string()]);
+    let accessories = discover_accessories(&systemd_dir, &app_directory, &opts.app, &process_names)?;
+    write_unit(&opts.app, &process_names, &accessories).await?;
+
     let tags = tag_for(&cfg, &opts.sha, &opts.branch);
 
     log(&format!(

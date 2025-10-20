@@ -89,7 +89,7 @@ secrets:
     let hl_yml_path = dir.join("hl.yml");
     fs::write(&hl_yml_path, hl_yml).await?;
 
-    let unit = write_unit(&opts.app).await?;
+    write_unit(&opts.app, &[], &[]).await?;
 
     log(&format!(
         "wrote {}, {} and {}",
@@ -98,8 +98,8 @@ secrets:
         env_path.display()
     ));
     ok(&format!(
-        "created {} (will be enabled on first deploy)",
-        unit
+        "created app {} (will be enabled on first deploy)",
+        opts.app
     ));
 
     // Create bare git repository

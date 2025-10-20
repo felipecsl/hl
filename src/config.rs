@@ -122,6 +122,10 @@ pub fn env_file(app: &str) -> PathBuf {
     app_dir(app).join(".env")
 }
 
+pub fn systemd_dir() -> PathBuf {
+    home_dir().join(".config/systemd/user")
+}
+
 /// Parse duration strings like "2s", "45s", "100ms" into milliseconds
 pub fn parse_duration(s: &str) -> Result<u64> {
     let re = regex::Regex::new(r"^(\d+)(ms|s|m)$")?;

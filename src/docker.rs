@@ -305,7 +305,7 @@ pub async fn write_process_compose_files(
             ));
         }
     } else {
-        // No Procfile, create default web process
+        // No Procfile, create default web process (will use default Dockerfile CMD)
         let compose_content = generate_process_compose("web", None);
         let compose_path = dir.join("compose.web.yml");
         fs::write(&compose_path, compose_content).await?;
