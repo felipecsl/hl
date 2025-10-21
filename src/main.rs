@@ -30,8 +30,8 @@ enum Commands {
     Restart(commands::restart::RestartArgs),
     /// Retag :latest to a previous sha and restart (health-gated)
     Rollback(commands::rollback::RollbackArgs),
-    /// Manage .env secrets
-    Secrets(commands::secrets::SecretsArgs),
+    /// Manage .env environment variables
+    Env(commands::env::EnvArgs),
 }
 
 #[tokio::main]
@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
         Commands::Logs(args) => commands::logs::execute(args).await?,
         Commands::Restart(args) => commands::restart::execute(args).await?,
         Commands::Rollback(args) => commands::rollback::execute(args).await?,
-        Commands::Secrets(args) => commands::secrets::execute(args).await?,
+        Commands::Env(args) => commands::env::execute(args).await?,
     }
 
     Ok(())

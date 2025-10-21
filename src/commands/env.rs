@@ -6,14 +6,14 @@ use std::path::Path;
 use tokio::fs;
 
 #[derive(Args)]
-pub struct SecretsArgs {
+pub struct EnvArgs {
     #[command(subcommand)]
-    pub command: SecretsCommands,
+    pub command: EnvCommands,
 }
 
 #[derive(Subcommand)]
-pub enum SecretsCommands {
-    /// Set environment variable secrets
+pub enum EnvCommands {
+    /// Set environment variables
     Set {
         /// Application name
         app: String,
@@ -27,14 +27,14 @@ pub enum SecretsCommands {
     },
 }
 
-pub async fn execute(args: SecretsArgs) -> Result<()> {
+pub async fn execute(args: EnvArgs) -> Result<()> {
     match args.command {
-        SecretsCommands::Set { app, pairs } => set_secrets(&app, pairs).await,
-        SecretsCommands::Ls { app } => list_secrets(&app).await,
+        EnvCommands::Set { app, pairs } => set_env(&app, pairs).await,
+        EnvCommands::Ls { app } => list_env(&app).await,
     }
 }
 
-async fn set_secrets(app: &str, pairs: Vec<String>) -> Result<()> {
+async fn set_env(app: &str, pairs: Vec<String>) -> Result<()> {
     let file_path = env_file(app);
     let dir = app_dir(app);
     fs::create_dir_all(&dir).await?;
@@ -92,7 +92,7 @@ async fn set_secrets(app: &str, pairs: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-async fn list_secrets(app: &str) -> Result<()> {
+async fn list_env(app: &str) -> Result<()> {
     let file_path = env_file(app);
     let text = fs::read_to_string(&file_path).await.unwrap_or_default();
 
