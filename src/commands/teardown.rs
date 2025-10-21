@@ -86,7 +86,7 @@ async fn remove_systemd_units(app: &str) -> Result<()> {
             // Check if filename matches the pattern
             if pattern.contains('*') {
                 let prefix = pattern.split('*').next().unwrap();
-                let suffix = pattern.split('*').last().unwrap();
+                let suffix = pattern.split('*').next_back().unwrap();
                 if filename_str.starts_with(prefix) && filename_str.ends_with(suffix) {
                     let path = entry.path();
                     debug(&format!("removing unit file: {}", path.display()));
