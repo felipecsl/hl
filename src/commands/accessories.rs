@@ -118,7 +118,7 @@ networks:
     external: true
     name: {}
 "#,
-        opts.app, version, opts.app, network, network, network
+        "web", version, opts.app, network, network, network
     );
 
     let postgres_compose_path = dir.join("compose.postgres.yml");
@@ -250,7 +250,7 @@ networks:
     external: true
     name: {}
 "#,
-        opts.app, version, opts.app, network, network, network
+        "web", version, opts.app, network, network, network
     );
 
     let redis_compose_path = dir.join("compose.redis.yml");

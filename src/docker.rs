@@ -267,6 +267,7 @@ pub async fn write_base_compose_file(
   restart: unless-stopped
   env_file: [.env]
   networks: [{}]
+services: {{}}
 networks:
   {}:
     external: true
@@ -505,6 +506,7 @@ mod tests {
   restart: unless-stopped
   env_file: [.env]
   networks: [traefik_proxy]
+services: {}
 networks:
   traefik_proxy:
     external: true
