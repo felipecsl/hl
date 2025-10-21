@@ -341,6 +341,7 @@ services:
     if process_name == "web" {
         service_def.push_str(&format!(
             r#"
+    container_name: {app}
     labels:
       traefik.enable: true
       traefik.http.routers.{app}.rule: Host(`${{DOMAIN}}`)
@@ -591,6 +592,7 @@ services:
       file: ./compose.yml
       service: base
 
+    container_name: testapp
     labels:
       traefik.enable: true
       traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
@@ -643,6 +645,7 @@ services:
       file: ./compose.yml
       service: base
 
+    container_name: testapp
     labels:
       traefik.enable: true
       traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
@@ -691,6 +694,7 @@ services:
       file: ./compose.yml
       service: base
 
+    container_name: testapp
     labels:
       traefik.enable: true
       traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
