@@ -180,10 +180,13 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         .accessories
         .iter()
         .map(|a| {
-            app_dir
-                .join(format!("-f compose.{a}.yml"))
-                .display()
-                .to_string()
+            format!(
+                "-f {}",
+                app_dir
+                    .join(format!("compose.{a}.yml"))
+                    .display()
+                    .to_string()
+            )
         })
         .collect::<Vec<_>>()
         .join(" ");
