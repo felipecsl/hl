@@ -98,18 +98,20 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     })
     .await?;
 
-    // Ensure accessories are started and ready before running migrations
-    log("enabling and starting accessories");
-    start_accessories(&cfg.app).await?;
-    if accessories.contains(&"postgres".to_string()) {
-        log("waiting for postgres to be ready...");
-        wait_for_postgres_ready(&cfg.app).await?;
-        ok("postgres is ready");
-    }
-    if accessories.contains(&"redis".to_string()) {
-        log("waiting for redis to be ready...");
-        wait_for_redis_ready(&cfg.app).await?;
-        ok("redis is ready");
+    if !accessories.is_empty() {
+        // Ensure accessories are started and ready before running migrations
+        log("enabling and starting accessories");
+        start_accessories(&cfg.app).await?;
+        if accessories.contains(&"postgres".to_string()) {
+            log("waiting for postgres to be ready...");
+            wait_for_postgres_ready(&cfg.app).await?;
+            ok("postgres is ready");
+        }
+        if accessories.contains(&"redis".to_string()) {
+            log("waiting for redis to be ready...");
+            wait_for_redis_ready(&cfg.app).await?;
+            ok("redis is ready");
+        }
     }
     log("running migrations");
     run_migrations(&cfg, &tags.sha).await?;
