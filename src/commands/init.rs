@@ -48,7 +48,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
         fs::write(&env_path, env_content).await?;
     }
 
-    write_base_compose_file(&dir, &opts.app, &opts.image, &opts.network).await?;
+    write_base_compose_file(&dir, &opts.image, &opts.network).await?;
     log(&format!(
         "wrote {} and {}",
         compose_path.display(),
