@@ -259,28 +259,20 @@ pub async fn write_base_compose_file(
     app: &str,
     image: &str,
     network: &str,
-    resolver: &str,
 ) -> Result<()> {
     let compose = format!(
-        r#"x-app-base: &app_base:
-  {}:
-    image: {}:latest
-    container_name: {}
-    restart: unless-stopped
-    env_file: [.env]
-    networks: [{}]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{}.rule=Host(`${{{}}}`)"
-      - "traefik.http.routers.{}.entrypoints=websecure"
-      - "traefik.http.routers.{}.tls.certresolver={}"
-      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}"
+        r#"x-app-base: &app_base
+  image: {}:latest
+  container_name: {}
+  restart: unless-stopped
+  env_file: [.env]
+  networks: [{}]
 networks:
   {}:
     external: true
     name: {}
 "#,
-        app, image, app, network, app, "DOMAIN", app, app, resolver, app, network, network
+        image, app, network, network, network
     );
     let compose_path = dir.join("compose.yml");
     fs::write(&compose_path, compose).await?;
@@ -296,14 +288,19 @@ networks:
 /// # Arguments
 /// * `dir` - Directory where compose files should be written
 /// * `processes` - Optional map of process names to commands from Procfile
+/// * `app` - Application name for Traefik labels
+/// * `resolver` - Traefik certificate resolver name
 pub async fn write_process_compose_files(
     dir: &Path,
     processes: Option<&std::collections::HashMap<String, String>>,
+    app: &str,
+    resolver: &str,
 ) -> Result<()> {
     if let Some(procs) = processes {
         // Generate a compose file for each process
         for (process_name, command) in procs {
-            let compose_content = generate_process_compose(process_name, Some(command));
+            let compose_content =
+                generate_process_compose(process_name, Some(command), app, resolver);
             let compose_path = dir.join(format!("compose.{}.yml", process_name));
             fs::write(&compose_path, compose_content).await?;
             debug(&format!(
@@ -313,7 +310,7 @@ pub async fn write_process_compose_files(
         }
     } else {
         // No Procfile, create default web process (will use default Dockerfile CMD)
-        let compose_content = generate_process_compose("web", None);
+        let compose_content = generate_process_compose("web", None, app, resolver);
         let compose_path = dir.join("compose.web.yml");
         fs::write(&compose_path, compose_content).await?;
         debug(&format!(
@@ -325,7 +322,34 @@ pub async fn write_process_compose_files(
 }
 
 /// Generate the YAML content for a process-specific compose file
-fn generate_process_compose(process_name: &str, command: Option<&String>) -> String {
+fn generate_process_compose(
+    process_name: &str,
+    command: Option<&String>,
+    app: &str,
+    resolver: &str,
+) -> String {
+    let mut service_def = format!(
+        r#"services:
+  {}:
+    <<: *app_base"#,
+        process_name
+    );
+
+    // Add Traefik labels only for web process
+    if process_name == "web" {
+        service_def.push_str(&format!(
+            r#"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{}.rule=Host(`${{DOMAIN}}`)"
+      - "traefik.http.routers.{}.entrypoints=websecure"
+      - "traefik.http.routers.{}.tls.certresolver={}"
+      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}""#,
+            app, app, app, resolver, app
+        ));
+    }
+
+    // Add command override if provided
     if let Some(cmd) = command {
         // Parse command string into individual arguments
         let args = match shell_words::split(cmd) {
@@ -338,26 +362,18 @@ fn generate_process_compose(process_name: &str, command: Option<&String>) -> Str
             .collect::<Vec<_>>()
             .join(",");
 
-        format!(
-            r#"services:
-  {}:
-    <<: *app_base
-    command: [{}]
-"#,
-            process_name, args_yaml
-        )
-    } else {
-        // No command override, just use base
-        format!(
-            r#"services:
-  {}:
-    <<: *app_base
-"#,
-            process_name
-        )
+        service_def.push_str(&format!(
+            r#"
+    command: [{}]"#,
+            args_yaml
+        ));
     }
-}
 
+    // Close the YAML with a newline
+    service_def.push('\n');
+
+    service_def
+}
 
 /// Wait for postgres to be ready by executing pg_isready inside a container.
 /// Uses docker compose exec to probe the postgres service.
@@ -479,24 +495,16 @@ mod tests {
         let app = "testapp";
         let image = "registry.example.com/testapp";
         let network = "traefik_proxy";
-        let resolver = "myresolver";
-        write_base_compose_file(dir_path, app, image, network, resolver).await?;
+        write_base_compose_file(dir_path, app, image, network).await?;
         let compose_path = dir_path.join("compose.yml");
         assert!(compose_path.exists(), "compose.yml should be created");
         let content = fs::read_to_string(&compose_path).await?;
-        let expected = r#"x-app-base: &app_base:
-  testapp:
-    image: registry.example.com/testapp:latest
-    container_name: testapp
-    restart: unless-stopped
-    env_file: [.env]
-    networks: [traefik_proxy]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.testapp.entrypoints=websecure"
-      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
-      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
+        let expected = r#"x-app-base: &app_base
+  image: registry.example.com/testapp:latest
+  container_name: testapp
+  restart: unless-stopped
+  env_file: [.env]
+  networks: [traefik_proxy]
 networks:
   traefik_proxy:
     external: true
@@ -566,7 +574,7 @@ networks:
             "bundle exec sidekiq -C config/sidekiq.yml".to_string(),
         );
 
-        write_process_compose_files(dir_path, Some(&processes)).await?;
+        write_process_compose_files(dir_path, Some(&processes), "testapp", "myresolver").await?;
 
         // Check web compose file
         let web_path = dir_path.join("compose.web.yml");
@@ -575,6 +583,12 @@ networks:
         let expected_web = r#"services:
   web:
     <<: *app_base
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.testapp.entrypoints=websecure"
+      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
+      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
     command: ["bundle","exec","rails","server","-p","$PORT"]
 "#;
         assert_eq!(
@@ -604,7 +618,7 @@ networks:
         let temp_dir = TempDir::new()?;
         let dir_path = temp_dir.path();
 
-        write_process_compose_files(dir_path, None).await?;
+        write_process_compose_files(dir_path, None, "testapp", "myresolver").await?;
 
         // Check default web compose file
         let web_path = dir_path.join("compose.web.yml");
@@ -613,6 +627,12 @@ networks:
         let expected_web = r#"services:
   web:
     <<: *app_base
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.testapp.entrypoints=websecure"
+      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
+      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
 "#;
         assert_eq!(
             web_content, expected_web,
@@ -624,7 +644,12 @@ networks:
 
     #[test]
     fn test_generate_process_compose_with_command() {
-        let result = generate_process_compose("worker", Some(&"bundle exec sidekiq".to_string()));
+        let result = generate_process_compose(
+            "worker",
+            Some(&"bundle exec sidekiq".to_string()),
+            "testapp",
+            "myresolver",
+        );
         let expected = r#"services:
   worker:
     <<: *app_base
@@ -638,10 +663,16 @@ networks:
 
     #[test]
     fn test_generate_process_compose_without_command() {
-        let result = generate_process_compose("web", None);
+        let result = generate_process_compose("web", None, "testapp", "myresolver");
         let expected = r#"services:
   web:
     <<: *app_base
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.testapp.entrypoints=websecure"
+      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
+      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
 "#;
         assert_eq!(
             result, expected,
@@ -654,6 +685,8 @@ networks:
         let result = generate_process_compose(
             "release",
             Some(&"bundle exec rake db:migrate db:seed".to_string()),
+            "testapp",
+            "myresolver",
         );
         let expected = r#"services:
   release:

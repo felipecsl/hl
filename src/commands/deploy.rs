@@ -59,7 +59,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     // Generate process-specific compose files
     log("generating process compose files");
     let app_directory = app_dir(&cfg.app);
-    write_process_compose_files(&app_directory, processes.as_ref()).await?;
+    write_process_compose_files(&app_directory, processes.as_ref(), &cfg.app, &cfg.resolver)
+        .await?;
     let systemd_dir = systemd_dir();
     let process_names = processes
         .map(|p| p.keys().cloned().collect::<Vec<String>>())
