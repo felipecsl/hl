@@ -341,11 +341,11 @@ fn generate_process_compose(
         service_def.push_str(&format!(
             r#"
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{}.rule=Host(`${{DOMAIN}}`)"
-      - "traefik.http.routers.{}.entrypoints=websecure"
-      - "traefik.http.routers.{}.tls.certresolver={}"
-      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}""#,
+      traefik.enable: true"
+      traefik.http.routers.{}.rule: Host(`${{DOMAIN}}`)"
+      traefik.http.routers.{}.entrypoints: websecure"
+      traefik.http.routers.{}.tls.certresolver: {}"
+      traefik.http.services.{}.loadbalancer.server.port: ${{SERVICE_PORT}}""#,
             app, app, app, resolver, app
         ));
     }
@@ -586,11 +586,11 @@ networks:
   web:
     <<: *app_base
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.testapp.entrypoints=websecure"
-      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
-      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
+      traefik.enable: true"
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)"
+      traefik.http.routers.testapp.entrypoints: websecure"
+      traefik.http.routers.testapp.tls.certresolver: myresolver"
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}"
     command: ["bundle","exec","rails","server","-p","$PORT"]
 "#;
         assert_eq!(
@@ -630,11 +630,11 @@ networks:
   web:
     <<: *app_base
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.testapp.entrypoints=websecure"
-      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
-      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
+      traefik.enable: true"
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)"
+      traefik.http.routers.testapp.entrypoints: websecure"
+      traefik.http.routers.testapp.tls.certresolver: myresolver"
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}"
 "#;
         assert_eq!(
             web_content, expected_web,
@@ -670,11 +670,11 @@ networks:
   web:
     <<: *app_base
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.testapp.entrypoints=websecure"
-      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
-      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
+      traefik.enable: true"
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)"
+      traefik.http.routers.testapp.entrypoints: websecure"
+      traefik.http.routers.testapp.tls.certresolver: myresolver"
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}"
 "#;
         assert_eq!(
             result, expected,
