@@ -8,7 +8,7 @@ use hl::{
     health::wait_for_healthy,
     log::*,
     procfile::parse_procfile,
-    systemd::{enable_accessories, reload_systemd_daemon, write_unit},
+    systemd::{enable_accessories, reload_systemd_daemon, start_accessories, write_unit},
 };
 
 #[derive(Args)]
@@ -97,8 +97,19 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     })
     .await?;
 
-    // TODO: This step hangs forever if the database container is not running
-    // Might need to ensure service is running before applying migrations
+    // Ensure accessories are started and ready before running migrations
+    log("enabling and starting accessories");
+    start_accessories(&cfg.app).await?;
+    if accessories.contains(&"postgres".to_string()) {
+        log("waiting for postgres to be ready...");
+        wait_for_postgres_ready(&cfg.app).await?;
+        ok("postgres is ready");
+    }
+    if accessories.contains(&"redis".to_string()) {
+        log("waiting for redis to be ready...");
+        wait_for_redis_ready(&cfg.app).await?;
+        ok("redis is ready");
+    }
     log("running migrations");
     run_migrations(&cfg, &tags.sha).await?;
 

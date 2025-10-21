@@ -557,3 +557,111 @@ networks:
         );
     }
 }
+
+/// Wait for postgres to be ready by executing pg_isready inside a container.
+/// Uses docker compose exec to probe the postgres service.
+pub async fn wait_for_postgres_ready(app: &str) -> Result<()> {
+    let dir = app_dir(app);
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    let mut compose_files = vec!["-f".to_string(), "compose.yml".to_string()];
+    compose_files.push("-f".to_string());
+    compose_files.push("compose.postgres.yml".to_string());
+
+    let project_name = format!("{}-acc", app);
+    debug(&format!(
+        "waiting for postgres to be ready (project: {}, timeout: 60s)",
+        project_name
+    ));
+
+    // Build the probe command: pg_isready with retry loop
+    let probe_script = "for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -p ${POSTGRES_PORT:-5432} && exit 0; sleep 1; done; exit 1";
+
+    let mut args = vec!["compose".to_string(), "-p".to_string(), project_name];
+    args.extend(compose_files);
+    args.extend(vec![
+        "exec".to_string(),
+        "-T".to_string(),
+        "pg".to_string(),
+        "sh".to_string(),
+        "-lc".to_string(),
+        probe_script.to_string(),
+    ]);
+
+    let status = Command::new("docker")
+        .args(&args)
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "postgres readiness probe failed after 60 seconds (status: {})",
+            status
+        );
+    }
+
+    debug("postgres is ready");
+
+    Ok(())
+}
+
+/// Wait for redis to be ready by executing redis-cli ping inside a container.
+/// Uses docker compose exec to probe the redis service.
+pub async fn wait_for_redis_ready(app: &str) -> Result<()> {
+    let dir = app_dir(app);
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    let mut compose_files = vec!["-f".to_string(), "compose.yml".to_string()];
+    compose_files.push("-f".to_string());
+    compose_files.push("compose.redis.yml".to_string());
+
+    let project_name = format!("{}-acc", app);
+    debug(&format!(
+        "waiting for redis to be ready (project: {}, timeout: 60s)",
+        project_name
+    ));
+
+    // Build the probe command: redis-cli ping with retry loop
+    let probe_script = "for i in $(seq 1 60); do redis-cli -h 127.0.0.1 ping | grep -q PONG && exit 0; sleep 1; done; exit 1";
+
+    let mut args = vec!["compose".to_string(), "-p".to_string(), project_name];
+    args.extend(compose_files);
+    args.extend(vec![
+        "exec".to_string(),
+        "-T".to_string(),
+        "redis".to_string(),
+        "sh".to_string(),
+        "-lc".to_string(),
+        probe_script.to_string(),
+    ]);
+
+    let status = Command::new("docker")
+        .args(&args)
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "redis readiness probe failed after 60 seconds (status: {})",
+            status
+        );
+    }
+
+    debug("redis is ready");
+
+    Ok(())
+}

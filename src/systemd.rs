@@ -88,6 +88,28 @@ pub async fn enable_accessories(app: &str) -> Result<()> {
     Ok(())
 }
 
+pub async fn start_accessories(app: &str) -> Result<()> {
+    let unit = format!("app-{}-acc.service", app);
+
+    debug(&format!("starting systemd service: {}", unit));
+
+    let status = Command::new("systemctl")
+        .args(["--user", "start", &unit])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!("systemctl --user start failed with status: {}", status);
+    }
+
+    debug("systemd service started successfully");
+
+    Ok(())
+}
+
 pub async fn restart_app_target(app: &str) -> Result<()> {
     let unit = format!("app-{}.target", app);
 
