@@ -90,11 +90,6 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
 
     let compose_postgres = format!(
         r#"services:
-  {}:
-    depends_on:
-      pg:
-        condition: service_healthy
-
   pg:
     image: postgres:{}
     container_name: {}_pg
@@ -118,7 +113,7 @@ networks:
     external: true
     name: {}
 "#,
-        "web", version, opts.app, network, network, network
+        version, opts.app, network, network, network
     );
 
     let postgres_compose_path = dir.join("compose.postgres.yml");
@@ -226,11 +221,6 @@ async fn add_redis(opts: AddArgs) -> Result<()> {
 
     let compose_redis = format!(
         r#"services:
-  {}:
-    depends_on:
-      redis:
-        condition: service_healthy
-
   redis:
     image: redis:{}
     container_name: {}_redis
@@ -250,7 +240,7 @@ networks:
     external: true
     name: {}
 "#,
-        "web", version, opts.app, network, network, network
+        version, opts.app, network, network, network
     );
 
     let redis_compose_path = dir.join("compose.redis.yml");
