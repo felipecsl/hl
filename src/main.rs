@@ -32,6 +32,8 @@ enum Commands {
     Rollback(commands::rollback::RollbackArgs),
     /// Manage .env environment variables
     Env(commands::env::EnvArgs),
+    /// Teardown an app (stop services, remove files, directories and git repo)
+    Teardown(commands::teardown::TeardownArgs),
 }
 
 #[tokio::main]
@@ -49,6 +51,7 @@ async fn main() -> Result<()> {
         Commands::Restart(args) => commands::restart::execute(args).await?,
         Commands::Rollback(args) => commands::rollback::execute(args).await?,
         Commands::Env(args) => commands::env::execute(args).await?,
+        Commands::Teardown(args) => commands::teardown::execute(args).await?,
     }
 
     Ok(())

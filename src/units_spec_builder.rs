@@ -194,6 +194,7 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         r#"[Unit]
 Description=App {app} accessories (Redis/Postgres/etc.)
 After=default.target
+PartOf=app-{app}.target
 
 [Service]
 Type=oneshot
@@ -244,6 +245,7 @@ fn render_process_service(spec: &UnitsSpec, proc_name: &str) -> String {
 Description=App {app} {proc} process
 After={after}
 Wants={wants}
+PartOf=app-{app}.target
 "#,
         app = app,
         proc = proc_name,
@@ -376,6 +378,7 @@ WantedBy=default.target
             r#"[Unit]
 Description=App testapp accessories (Redis/Postgres/etc.)
 After=default.target
+PartOf=app-testapp.target
 
 [Service]
 Type=oneshot
@@ -411,6 +414,7 @@ WantedBy=default.target
 Description=App testapp web process
 After=default.target app-testapp-acc.service
 Wants=app-testapp-acc.service
+PartOf=app-testapp.target
 
 [Service]
 Type=oneshot
@@ -441,6 +445,7 @@ WantedBy=app-testapp.target
 Description=App testapp worker process
 After=default.target app-testapp-acc.service
 Wants=app-testapp-acc.service
+PartOf=app-testapp.target
 
 [Service]
 Type=oneshot
@@ -511,6 +516,7 @@ WantedBy=default.target\n";
 Description=App simpleapp web process
 After=default.target
 Wants=
+PartOf=app-simpleapp.target
 
 [Service]
 Type=oneshot

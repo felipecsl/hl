@@ -149,3 +149,45 @@ pub async fn reload_systemd_daemon() -> Result<()> {
     }
     Ok(())
 }
+
+pub async fn stop_app_target(app: &str) -> Result<()> {
+    let unit = format!("app-{}.target", app);
+
+    debug(&format!("stopping and disabling systemd target: {}", unit));
+
+    // Stop the target
+    let status = Command::new("systemctl")
+        .args(["--user", "stop", &unit])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        debug(&format!(
+            "systemctl --user stop failed with status: {} (continuing anyway)",
+            status
+        ));
+    }
+
+    // Disable the target
+    let status = Command::new("systemctl")
+        .args(["--user", "disable", &unit])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        debug(&format!(
+            "systemctl --user disable failed with status: {} (continuing anyway)",
+            status
+        ));
+    }
+
+    debug("stopped and disabled systemd services");
+
+    Ok(())
+}
