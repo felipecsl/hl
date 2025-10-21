@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use hl::config::{hl_git_root, home_dir};
-use hl::docker::write_base_compose_file;
+use hl::docker::{write_base_compose_file, write_process_compose_files};
 use hl::git::{init_bare_repo, repo_remote_uri};
 use hl::{config::app_dir, log::*, systemd::write_unit};
 use std::path::Path;
@@ -38,6 +38,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
     let dir = app_dir(&opts.app);
     fs::create_dir_all(&dir).await?;
 
+    let compose_path = dir.join("compose.yml");
     let env_path = dir.join(".env");
     if !Path::new(&env_path).exists() {
         let env_content = format!(
@@ -47,9 +48,44 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
         fs::write(&env_path, env_content).await?;
     }
 
-    write_base_compose_file(&dir, &opts.app, &opts.image, &opts.network, &opts.resolver).await?;
-    let compose_path = dir.join("compose.yml");
+    write_base_compose_file(&dir, &opts.image, &opts.network).await?;
+    log(&format!(
+        "wrote {} and {}",
+        compose_path.display(),
+        env_path.display()
+    ));
 
+    // Write a default compose.web.yml (this might be overwritten later upon deploy if a Procfile is present)
+    // We need it here so that the init command creates all necessary files and accessories can boot up correctly
+    write_process_compose_files(&dir, None, &opts.app, &opts.resolver).await?;
+    write_config_file(&opts).await?;
+    write_unit(&opts.app, &["web".to_string()], &[]).await?;
+
+    ok(&format!(
+        "created app {} (will be enabled on first deploy)",
+        opts.app
+    ));
+
+    // Create bare git repository
+    let home = home_dir().to_string_lossy().to_string();
+    let git_root = hl_git_root(opts.app.as_str());
+    let git_dir = git_root.to_string_lossy().to_string();
+
+    init_bare_repo(&git_root, &opts.app, &home).await?;
+
+    ok(&format!("created git repository at {}", &git_dir));
+
+    let git_uri = repo_remote_uri(&git_dir);
+    log(&format!(
+        "To deploy from your local machine, add a git remote:\n  git remote add production {}",
+        git_uri
+    ));
+
+    Ok(())
+}
+
+async fn write_config_file(opts: &InitArgs) -> Result<()> {
+    let dir = app_dir(&opts.app);
     // TODO: hl currently makes a bunch of assumptions about the app being deployed:
     // - it's a Rails app and environment is production
     // - it uses RAILS_MASTER_KEY and SECRET_KEY_BASE secrets
@@ -88,34 +124,6 @@ secrets:
 
     let hl_yml_path = dir.join("hl.yml");
     fs::write(&hl_yml_path, hl_yml).await?;
-
-    let unit = write_unit(&opts.app).await?;
-
-    log(&format!(
-        "wrote {}, {} and {}",
-        compose_path.display(),
-        hl_yml_path.display(),
-        env_path.display()
-    ));
-    ok(&format!(
-        "created {} (will be enabled on first deploy)",
-        unit
-    ));
-
-    // Create bare git repository
-    let home = home_dir().to_string_lossy().to_string();
-    let git_root = hl_git_root(opts.app.as_str());
-    let git_dir = git_root.to_string_lossy().to_string();
-
-    init_bare_repo(&git_root, &opts.app, &home).await?;
-
-    ok(&format!("created git repository at {}", &git_dir));
-
-    let git_uri = repo_remote_uri(&git_dir);
-    log(&format!(
-        "To deploy from your local machine, add a git remote:\n  git remote add production {}",
-        git_uri
-    ));
-
+    log(&format!("wrote {}", hl_yml_path.display()));
     Ok(())
 }

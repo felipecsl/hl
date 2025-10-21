@@ -1,6 +1,6 @@
 use crate::config::{app_dir, env_file, HLConfig};
 use crate::log::debug;
-use crate::systemd::restart_service;
+use crate::systemd::restart_app_target;
 use anyhow::Result;
 use std::path::Path;
 use std::process::Stdio;
@@ -119,7 +119,11 @@ pub async fn retag_latest(image: &str, from_tag: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
+pub async fn restart_compose(
+    cfg: &HLConfig,
+    processes: &[String],
+    accessories: &[String],
+) -> Result<()> {
     let dir = app_dir(&cfg.app);
 
     debug(&format!("restart_compose: app_dir={}", dir.display()));
@@ -128,16 +132,19 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("App directory not found: {}", dir.display());
     }
 
-    let compose_file = dir.join("compose.yml");
-    if !compose_file.exists() {
-        anyhow::bail!("compose.yml not found at: {}", compose_file.display());
+    let mut args = vec!["compose".to_string()];
+    args.push("-f".into());
+    args.push("compose.yml".into());
+    for name in processes.iter().chain(accessories.iter()) {
+        args.push("-f".into());
+        args.push(format!("compose.{name}.yml"));
     }
+    args.push("pull".into());
 
     debug("pulling latest images with docker compose");
 
-    // Pull latest images
     let status = Command::new("docker")
-        .args(["compose", "-f", "compose.yml", "pull"])
+        .args(&args)
         .current_dir(&dir)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -149,7 +156,7 @@ pub async fn restart_compose(cfg: &HLConfig) -> Result<()> {
         anyhow::bail!("docker compose pull failed with status: {}", status);
     }
 
-    restart_service(&cfg.app).await?;
+    restart_app_target(&cfg.app).await?;
 
     Ok(())
 }
@@ -247,36 +254,235 @@ pub fn tag_for(cfg: &HLConfig, sha: &str, branch: &str) -> ImageTags {
 }
 
 /// Generate the base compose.yml file content for an application
-pub async fn write_base_compose_file(
-    dir: &Path,
-    app: &str,
-    image: &str,
-    network: &str,
-    resolver: &str,
-) -> Result<()> {
+pub async fn write_base_compose_file(dir: &Path, image: &str, network: &str) -> Result<()> {
     let compose = format!(
-        r#"services:
-  {}:
-    image: {}:latest
-    container_name: {}
+        r#"
+services:
+  base:
+    image: {image}:latest
     restart: unless-stopped
     env_file: [.env]
-    networks: [{}]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{}.rule=Host(`${{{}}}`)"
-      - "traefik.http.routers.{}.entrypoints=websecure"
-      - "traefik.http.routers.{}.tls.certresolver={}"
-      - "traefik.http.services.{}.loadbalancer.server.port=${{SERVICE_PORT}}"
+    networks: [{network}]
+    profiles: ["_template"]
 networks:
-  {}:
+  {network}:
     external: true
-    name: {}
+    name: {network}
 "#,
-        app, image, app, network, app, "DOMAIN", app, app, resolver, app, network, network
+        image = image,
+        network = network
     );
     let compose_path = dir.join("compose.yml");
     fs::write(&compose_path, compose).await?;
+    Ok(())
+}
+
+/// Generate process-specific compose files from a Procfile
+///
+/// For each process in the map, creates a `compose.{process}.yml` file
+/// with the process name and command. If processes is None, creates a
+/// default `compose.web.yml` with no command override.
+///
+/// # Arguments
+/// * `dir` - Directory where compose files should be written
+/// * `processes` - Optional map of process names to commands from Procfile
+/// * `app` - Application name for Traefik labels
+/// * `resolver` - Traefik certificate resolver name
+pub async fn write_process_compose_files(
+    dir: &Path,
+    processes: Option<&std::collections::HashMap<String, String>>,
+    app: &str,
+    resolver: &str,
+) -> Result<()> {
+    if let Some(procs) = processes {
+        // Generate a compose file for each process
+        for (process_name, command) in procs {
+            let compose_content =
+                generate_process_compose(process_name, Some(command), app, resolver);
+            let compose_path = dir.join(format!("compose.{}.yml", process_name));
+            fs::write(&compose_path, compose_content).await?;
+            debug(&format!(
+                "wrote process compose file: {}",
+                compose_path.display()
+            ));
+        }
+    } else {
+        // No Procfile, create default web process (will use default Dockerfile CMD)
+        let compose_content = generate_process_compose("web", None, app, resolver);
+        let compose_path = dir.join("compose.web.yml");
+        fs::write(&compose_path, compose_content).await?;
+        debug(&format!(
+            "wrote default web compose file: {}",
+            compose_path.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Generate the YAML content for a process-specific compose file
+fn generate_process_compose(
+    process_name: &str,
+    command: Option<&String>,
+    app: &str,
+    resolver: &str,
+) -> String {
+    let mut service_def = format!(
+        r#"
+services:
+  {process_name}:
+    extends:
+      file: ./compose.yml
+      service: base
+"#,
+        process_name = process_name
+    );
+
+    // Add Traefik labels only for web process
+    if process_name == "web" {
+        service_def.push_str(&format!(
+            r#"
+    labels:
+      traefik.enable: true
+      traefik.http.routers.{app}.rule: Host(`${{DOMAIN}}`)
+      traefik.http.routers.{app}.entrypoints: websecure
+      traefik.http.routers.{app}.tls.certresolver: {resolver}
+      traefik.http.services.{app}.loadbalancer.server.port: ${{SERVICE_PORT}}"#,
+            app = app,
+            resolver = resolver
+        ));
+    }
+
+    // Add command override if provided
+    if let Some(cmd) = command {
+        // Parse command string into individual arguments
+        let args = match shell_words::split(cmd) {
+            Ok(parts) => parts,
+            Err(_) => vec![cmd.to_string()],
+        };
+        let args_yaml = args
+            .iter()
+            .map(|arg| format!("\"{}\"", arg))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        service_def.push_str(&format!(
+            r#"
+    command: [{}]"#,
+            args_yaml
+        ));
+    }
+
+    // Close the YAML with a newline
+    service_def.push('\n');
+
+    service_def
+}
+
+/// Wait for postgres to be ready by executing pg_isready inside a container.
+/// Uses docker compose exec to probe the postgres service.
+pub async fn wait_for_postgres_ready(app: &str) -> Result<()> {
+    let dir = app_dir(app);
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    let mut compose_files = vec!["-f".to_string(), "compose.yml".to_string()];
+    compose_files.push("-f".to_string());
+    compose_files.push("compose.postgres.yml".to_string());
+
+    let project_name = format!("{}-acc", app);
+    debug(&format!(
+        "waiting for postgres to be ready (project: {}, timeout: 60s)",
+        project_name
+    ));
+
+    // Build the probe command: pg_isready with retry loop
+    let probe_script = "for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -p ${POSTGRES_PORT:-5432} && exit 0; sleep 1; done; exit 1";
+
+    let mut args = vec!["compose".to_string(), "-p".to_string(), project_name];
+    args.extend(compose_files);
+    args.extend(vec![
+        "exec".to_string(),
+        "-T".to_string(),
+        "pg".to_string(),
+        "sh".to_string(),
+        "-lc".to_string(),
+        probe_script.to_string(),
+    ]);
+
+    let status = Command::new("docker")
+        .args(&args)
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "postgres readiness probe failed after 60 seconds (status: {})",
+            status
+        );
+    }
+
+    debug("postgres is ready");
+
+    Ok(())
+}
+
+/// Wait for redis to be ready by executing redis-cli ping inside a container.
+/// Uses docker compose exec to probe the redis service.
+pub async fn wait_for_redis_ready(app: &str) -> Result<()> {
+    let dir = app_dir(app);
+
+    if !dir.exists() {
+        anyhow::bail!("App directory not found: {}", dir.display());
+    }
+
+    let mut compose_files = vec!["-f".to_string(), "compose.yml".to_string()];
+    compose_files.push("-f".to_string());
+    compose_files.push("compose.redis.yml".to_string());
+
+    let project_name = format!("{}-acc", app);
+    debug(&format!(
+        "waiting for redis to be ready (project: {}, timeout: 60s)",
+        project_name
+    ));
+
+    // Build the probe command: redis-cli ping with retry loop
+    let probe_script = "for i in $(seq 1 60); do redis-cli -h 127.0.0.1 ping | grep -q PONG && exit 0; sleep 1; done; exit 1";
+
+    let mut args = vec!["compose".to_string(), "-p".to_string(), project_name];
+    args.extend(compose_files);
+    args.extend(vec![
+        "exec".to_string(),
+        "-T".to_string(),
+        "redis".to_string(),
+        "sh".to_string(),
+        "-lc".to_string(),
+        probe_script.to_string(),
+    ]);
+
+    let status = Command::new("docker")
+        .args(&args)
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "redis readiness probe failed after 60 seconds (status: {})",
+            status
+        );
+    }
+
+    debug("redis is ready");
+
     Ok(())
 }
 
@@ -289,27 +495,20 @@ mod tests {
     async fn test_write_base_compose_file() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let dir_path = temp_dir.path();
-        let app = "testapp";
         let image = "registry.example.com/testapp";
         let network = "traefik_proxy";
-        let resolver = "myresolver";
-        write_base_compose_file(dir_path, app, image, network, resolver).await?;
+        write_base_compose_file(dir_path, image, network).await?;
         let compose_path = dir_path.join("compose.yml");
         assert!(compose_path.exists(), "compose.yml should be created");
         let content = fs::read_to_string(&compose_path).await?;
-        let expected = r#"services:
-  testapp:
+        let expected = r#"
+services:
+  base:
     image: registry.example.com/testapp:latest
-    container_name: testapp
     restart: unless-stopped
     env_file: [.env]
     networks: [traefik_proxy]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.testapp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.testapp.entrypoints=websecure"
-      - "traefik.http.routers.testapp.tls.certresolver=myresolver"
-      - "traefik.http.services.testapp.loadbalancer.server.port=${SERVICE_PORT}"
+    profiles: ["_template"]
 networks:
   traefik_proxy:
     external: true
@@ -359,6 +558,172 @@ networks:
         assert_eq!(
             result, expected,
             "Migration command should match expected output"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_write_process_compose_files_with_procfile() -> Result<()> {
+        use std::collections::HashMap;
+
+        let temp_dir = TempDir::new()?;
+        let dir_path = temp_dir.path();
+
+        let mut processes = HashMap::new();
+        processes.insert(
+            "web".to_string(),
+            "bundle exec rails server -p $PORT".to_string(),
+        );
+        processes.insert(
+            "worker".to_string(),
+            "bundle exec sidekiq -C config/sidekiq.yml".to_string(),
+        );
+
+        write_process_compose_files(dir_path, Some(&processes), "testapp", "myresolver").await?;
+
+        // Check web compose file
+        let web_path = dir_path.join("compose.web.yml");
+        assert!(web_path.exists(), "compose.web.yml should be created");
+        let web_content = fs::read_to_string(&web_path).await?;
+        let expected_web = r#"
+services:
+  web:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    labels:
+      traefik.enable: true
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
+      traefik.http.routers.testapp.entrypoints: websecure
+      traefik.http.routers.testapp.tls.certresolver: myresolver
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}
+    command: ["bundle","exec","rails","server","-p","$PORT"]
+"#;
+        assert_eq!(
+            web_content, expected_web,
+            "Web compose content should match"
+        );
+
+        // Check worker compose file
+        let worker_path = dir_path.join("compose.worker.yml");
+        assert!(worker_path.exists(), "compose.worker.yml should be created");
+        let worker_content = fs::read_to_string(&worker_path).await?;
+        let expected_worker = r#"
+services:
+  worker:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    command: ["bundle","exec","sidekiq","-C","config/sidekiq.yml"]
+"#;
+        assert_eq!(
+            worker_content, expected_worker,
+            "Worker compose content should match"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_write_process_compose_files_without_procfile() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let dir_path = temp_dir.path();
+
+        write_process_compose_files(dir_path, None, "testapp", "myresolver").await?;
+
+        // Check default web compose file
+        let web_path = dir_path.join("compose.web.yml");
+        assert!(web_path.exists(), "compose.web.yml should be created");
+        let web_content = fs::read_to_string(&web_path).await?;
+        let expected_web = r#"
+services:
+  web:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    labels:
+      traefik.enable: true
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
+      traefik.http.routers.testapp.entrypoints: websecure
+      traefik.http.routers.testapp.tls.certresolver: myresolver
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}
+"#;
+        assert_eq!(
+            web_content, expected_web,
+            "Default web compose content should match"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_process_compose_with_command() {
+        let result = generate_process_compose(
+            "worker",
+            Some(&"bundle exec sidekiq".to_string()),
+            "testapp",
+            "myresolver",
+        );
+        let expected = r#"
+services:
+  worker:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    command: ["bundle","exec","sidekiq"]
+"#;
+        assert_eq!(
+            result, expected,
+            "Process compose with command should match"
+        );
+    }
+
+    #[test]
+    fn test_generate_process_compose_without_command() {
+        let result = generate_process_compose("web", None, "testapp", "myresolver");
+        let expected = r#"
+services:
+  web:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    labels:
+      traefik.enable: true
+      traefik.http.routers.testapp.rule: Host(`${DOMAIN}`)
+      traefik.http.routers.testapp.entrypoints: websecure
+      traefik.http.routers.testapp.tls.certresolver: myresolver
+      traefik.http.services.testapp.loadbalancer.server.port: ${SERVICE_PORT}
+"#;
+        assert_eq!(
+            result, expected,
+            "Process compose without command should match"
+        );
+    }
+
+    #[test]
+    fn test_generate_process_compose_with_complex_command() {
+        let result = generate_process_compose(
+            "release",
+            Some(&"bundle exec rake db:migrate db:seed".to_string()),
+            "testapp",
+            "myresolver",
+        );
+        let expected = r#"
+services:
+  release:
+    extends:
+      file: ./compose.yml
+      service: base
+
+    command: ["bundle","exec","rake","db:migrate","db:seed"]
+"#;
+        assert_eq!(
+            result, expected,
+            "Complex command should be parsed correctly"
         );
     }
 }

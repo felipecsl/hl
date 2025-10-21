@@ -1,121 +1,72 @@
-use crate::config::app_dir;
 use crate::log::debug;
+use crate::units_spec_builder::{render_and_write, UnitsSpec, WriteOutcome};
 use anyhow::Result;
-use std::env;
 use std::process::Stdio;
-use tokio::fs;
 use tokio::process::Command;
 
-pub async fn write_unit(app: &str) -> Result<String> {
-    let unit = format!("app-{}.service", app);
-    let wd = app_dir(app);
+/*
+                                   ┌───────────────────────────────┐
+                                   │  multi-user.target            │
+                                   └──────────────┬────────────────┘
+                                                  │ Wants
+                                     enable →     ▼
+                                   ┌───────────────────────────────┐
+                                   │  app-<app>.target             │
+                                   └───────┬───────────┬───────────┘
+                                           │Wants      │Wants
+                                           │           │
+                                           ▼           ▼
+                      ┌──────────────────────────┐   ┌──────────────────────────┐
+                      │ app-<app>-acc.service    │   │ app-<app>-web.service    │
+                      └───────────┬──────────────┘   └───────────┬──────────────┘
+                                  │ After/Requires                │ After + Wants acc
+                                  │ docker.service                │
+                                  │ network-online.target         │
+                                  │                               │
+                                  ▼                               ▼
+                  (docker compose -p <app>-acc up -d acc…)   (docker compose -p <app> up -d web)
+                                                                ↑
+                                                                │
+                      ┌──────────────────────────┐              │
+                      │ app-<app>-worker.service │◄─────────────┘
+                      └───────────┬──────────────┘
+                                  │ After + Wants acc
+                                  │ (optional ExecStartPost: --scale worker=N)
+                                  ▼
+                           (docker compose -p <app> up -d worker)
 
-    debug(&format!(
-        "write_unit: app={}, unit={}, working_directory={}",
-        app,
-        unit,
-        wd.display()
-    ));
 
-    if !wd.exists() {
-        anyhow::bail!("App directory not found: {}", wd.display());
-    }
 
-    // Build the compose file list
-    let mut compose_files = vec!["compose.yml".to_string()];
-    // Valid accessory compose files (easy to expand in the future)
-    let valid_accessories = ["compose.postgres.yml", "compose.redis.yml"];
-    // Find valid accessory files in the directory
-    let mut entries = fs::read_dir(&wd).await?;
-    let mut accessory_files = Vec::new();
+Legend:
+- app-<app>.target          A virtual “stack switch” for your app.
+- app-<app>-acc.service     Accessories (Redis/Postgres) Compose project (<app>-acc).
+- app-<app>-web.service     Web process (service name = "web") in Compose project <app>.
+- app-<app>-worker.service  Worker process (service name = "worker") in Compose project <app>.
+- All process units: Type=oneshot, RemainAfterExit=yes (Docker keeps containers running).
+- Process units declare `After=app-<app>-acc.service` and `Wants=app-<app>-acc.service`
+  when accessories exist; otherwise they just `After=docker.service network-online.target`.
+ */
 
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            // Check if this is one of our valid accessory files
-            if valid_accessories.contains(&filename) {
-                accessory_files.push(filename.to_string());
-            }
+pub async fn write_unit(app: &str, processes: &[String], accessories: &[String]) -> Result<()> {
+    let spec_builder = UnitsSpec::builder(app)?;
+    let spec = spec_builder
+        .processes(processes.to_vec())
+        .accessories(accessories.to_vec())
+        .build();
+    let outcomes = render_and_write(&spec)?;
+    for o in outcomes {
+        match o {
+            WriteOutcome::Created(p) => debug(&format!("Created {}", p.display())),
+            WriteOutcome::Updated(p) => debug(&format!("Updated {}", p.display())),
+            WriteOutcome::Unchanged(p) => debug(&format!("Unchanged {}", p.display())),
         }
     }
 
-    // Sort for deterministic ordering
-    accessory_files.sort();
-    compose_files.extend(accessory_files);
-
-    // Build the docker compose command arguments
-    let compose_args = compose_files
-        .iter()
-        .map(|f| format!("-f {}", f))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let text = format!(
-        r#"[Unit]
-Description=Compose stack for {app}
-After=default.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory={wd}
-# Wait until the Docker daemon/socket is up
-ExecStartPre=/bin/sh -c 'until /usr/bin/docker info >/dev/null 2>&1; do sleep 1; done'
-ExecStart=/usr/bin/docker compose {compose_args} up -d
-ExecStop=/usr/bin/docker compose {compose_args} down
-TimeoutStartSec=0
-
-[Install]
-WantedBy=default.target
-"#,
-        app = app,
-        wd = wd.display(),
-        compose_args = compose_args
-    );
-
-    // Get the user's home directory
-    let home = env::var("HOME").or_else(|_| {
-        env::var("USERPROFILE") // Windows fallback
-    })?;
-
-    let systemd_user_dir = format!("{}/.config/systemd/user", home);
-
-    debug(&format!("systemd user directory: {}", systemd_user_dir));
-
-    // Ensure the directory exists
-    fs::create_dir_all(&systemd_user_dir).await?;
-
-    let unit_path = format!("{}/{}", systemd_user_dir, unit);
-
-    debug(&format!("writing systemd unit file to: {}", unit_path));
-
-    fs::write(&unit_path, text).await?;
-
-    debug("reloading systemd daemon");
-
-    // Reload systemd daemon
-    let status = Command::new("systemctl")
-        .args(["--user", "daemon-reload"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        anyhow::bail!(
-            "systemctl --user daemon-reload failed with status: {}",
-            status
-        );
-    }
-
-    debug("systemd unit written and daemon reloaded successfully");
-
-    Ok(unit)
+    Ok(())
 }
 
-pub async fn enable_service(app: &str) -> Result<()> {
-    let unit = format!("app-{}.service", app);
+pub async fn enable_accessories(app: &str) -> Result<()> {
+    let unit = format!("app-{}-acc.service", app);
 
     debug(&format!("enabling systemd service: {}", unit));
 
@@ -137,12 +88,33 @@ pub async fn enable_service(app: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn restart_service(app: &str) -> Result<()> {
-    let unit = format!("app-{}.service", app);
+pub async fn start_accessories(app: &str) -> Result<()> {
+    let unit = format!("app-{}-acc.service", app);
+
+    debug(&format!("starting systemd service: {}", unit));
+
+    let status = Command::new("systemctl")
+        .args(["--user", "start", &unit])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!("systemctl --user start failed with status: {}", status);
+    }
+
+    debug("systemd service started successfully");
+
+    Ok(())
+}
+
+pub async fn restart_app_target(app: &str) -> Result<()> {
+    let unit = format!("app-{}.target", app);
 
     debug(&format!("restarting systemd service: {}", unit));
 
-    // Restart the service
     let status = Command::new("systemctl")
         .args(["--user", "restart", &unit])
         .stdin(Stdio::inherit())
@@ -157,5 +129,23 @@ pub async fn restart_service(app: &str) -> Result<()> {
 
     debug("systemd service restarted successfully");
 
+    Ok(())
+}
+
+pub async fn reload_systemd_daemon() -> Result<()> {
+    let status = Command::new("systemctl")
+        .args(["--user", "daemon-reload"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "systemctl --user daemon-reload failed with status: {}",
+            status
+        );
+    }
     Ok(())
 }

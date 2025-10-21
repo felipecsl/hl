@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Args;
-use hl::{log::*, systemd::restart_service};
+use hl::{log::*, systemd::restart_app_target};
 
 #[derive(Args)]
 pub struct RestartArgs {
@@ -11,7 +11,7 @@ pub struct RestartArgs {
 
 pub async fn execute(args: RestartArgs) -> Result<()> {
     log(&format!("restarting service for app: {}", args.app));
-    restart_service(&args.app).await?;
+    restart_app_target(&args.app).await?;
     ok("restart complete");
     Ok(())
 }

@@ -1,8 +1,10 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use hl::config::{app_dir, load_config};
+use hl::config::{app_dir, load_config, systemd_dir};
+use hl::discovery::{discover_accessories, discover_processes};
+use hl::docker::{wait_for_postgres_ready, wait_for_redis_ready};
 use hl::log::*;
-use hl::systemd::{restart_service, write_unit};
+use hl::systemd::{enable_accessories, reload_systemd_daemon, restart_app_target, write_unit};
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -88,11 +90,6 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
 
     let compose_postgres = format!(
         r#"services:
-  {}:
-    depends_on:
-      pg:
-        condition: service_healthy
-
   pg:
     image: postgres:{}
     container_name: {}_pg
@@ -116,7 +113,7 @@ networks:
     external: true
     name: {}
 "#,
-        opts.app, version, opts.app, network, network, network
+        version, opts.app, network, network, network
     );
 
     let postgres_compose_path = dir.join("compose.postgres.yml");
@@ -183,10 +180,17 @@ networks:
     }
 
     // Regenerate the systemd unit to include the new compose.postgres.yml file
-    write_unit(&opts.app).await?;
+    let systemd_dir = systemd_dir();
+    let processes = discover_processes(&systemd_dir, &opts.app)?;
+    let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
+    write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include postgres compose file");
-
-    restart_service(&opts.app).await?;
+    reload_systemd_daemon().await?;
+    enable_accessories(&opts.app).await?;
+    log("waiting for postgres to be ready...");
+    wait_for_postgres_ready(&opts.app).await?;
+    ok("postgres is ready");
+    restart_app_target(&opts.app).await?;
 
     Ok(())
 }
@@ -217,11 +221,6 @@ async fn add_redis(opts: AddArgs) -> Result<()> {
 
     let compose_redis = format!(
         r#"services:
-  {}:
-    depends_on:
-      redis:
-        condition: service_healthy
-
   redis:
     image: redis:{}
     container_name: {}_redis
@@ -241,7 +240,7 @@ networks:
     external: true
     name: {}
 "#,
-        opts.app, version, opts.app, network, network, network
+        version, opts.app, network, network, network
     );
 
     let redis_compose_path = dir.join("compose.redis.yml");
@@ -285,11 +284,17 @@ networks:
         log("REDIS_URL already exists in .env");
     }
 
-    // Regenerate the systemd unit to include the new compose.redis.yml file
-    write_unit(&opts.app).await?;
+    let systemd_dir = systemd_dir();
+    let processes = discover_processes(&systemd_dir, &opts.app)?;
+    let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
+    write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include redis compose file");
-
-    restart_service(&opts.app).await?;
+    reload_systemd_daemon().await?;
+    enable_accessories(&opts.app).await?;
+    log("waiting for redis to be ready...");
+    wait_for_redis_ready(&opts.app).await?;
+    ok("redis is ready");
+    restart_app_target(&opts.app).await?;
 
     Ok(())
 }

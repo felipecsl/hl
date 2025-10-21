@@ -1,12 +1,14 @@
 use anyhow::Result;
 use clap::Args;
 use hl::{
-    config::{hl_git_root, load_config},
+    config::{app_dir, hl_git_root, load_config, systemd_dir},
+    discovery::discover_accessories,
     docker::*,
     git::export_commit,
     health::wait_for_healthy,
     log::*,
-    systemd::enable_service,
+    procfile::parse_procfile,
+    systemd::{enable_accessories, reload_systemd_daemon, start_accessories, write_unit},
 };
 
 #[derive(Args)]
@@ -37,7 +39,36 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
     debug(&format!("exported worktree to: {}", worktree.display()));
 
+    // Check for Procfile and parse if present
+    let procfile_path = worktree.join("Procfile");
+    let processes = if procfile_path.exists() {
+        debug("found Procfile, parsing processes");
+        let procs = parse_procfile(&procfile_path).await?;
+        debug(&format!("parsed {} processes from Procfile", procs.len()));
+        for (name, cmd) in &procs {
+            debug(&format!("  {}: {}", name, cmd));
+        }
+        Some(procs)
+    } else {
+        debug("no Procfile found, using default configuration");
+        None
+    };
+
     let cfg = load_config(&opts.app).await?;
+
+    // Generate process-specific compose files
+    log("generating process compose files");
+    let app_directory = app_dir(&cfg.app);
+    write_process_compose_files(&app_directory, processes.as_ref(), &cfg.app, &cfg.resolver)
+        .await?;
+    let systemd_dir = systemd_dir();
+    let process_names = processes
+        .map(|p| p.keys().cloned().collect::<Vec<String>>())
+        .unwrap_or_else(|| vec!["web".to_string()]);
+    let accessories =
+        discover_accessories(&systemd_dir, &app_directory, &opts.app, &process_names)?;
+    write_unit(&opts.app, &process_names, &accessories).await?;
+
     let tags = tag_for(&cfg, &opts.sha, &opts.branch);
 
     log(&format!(
@@ -67,8 +98,19 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     })
     .await?;
 
-    // TODO: This step hangs forever if the database container is not running
-    // Might need to ensure service is running before applying migrations
+    // Ensure accessories are started and ready before running migrations
+    log("enabling and starting accessories");
+    start_accessories(&cfg.app).await?;
+    if accessories.contains(&"postgres".to_string()) {
+        log("waiting for postgres to be ready...");
+        wait_for_postgres_ready(&cfg.app).await?;
+        ok("postgres is ready");
+    }
+    if accessories.contains(&"redis".to_string()) {
+        log("waiting for redis to be ready...");
+        wait_for_redis_ready(&cfg.app).await?;
+        ok("redis is ready");
+    }
     log("running migrations");
     run_migrations(&cfg, &tags.sha).await?;
 
@@ -76,10 +118,11 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     retag_latest(&cfg.image, &tags.sha).await?;
 
     log("enabling systemd service");
-    enable_service(&cfg.app).await?;
+    reload_systemd_daemon().await?;
+    enable_accessories(&cfg.app).await?;
 
-    log("restarting compose");
-    restart_compose(&cfg).await?;
+    log("restarting services");
+    restart_compose(&cfg, &process_names, &accessories).await?;
 
     log("waiting for health");
     wait_for_healthy(
