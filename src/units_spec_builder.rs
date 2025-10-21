@@ -51,13 +51,12 @@ impl UnitsSpecBuilder {
         self
     }
     pub fn build(self) -> UnitsSpec {
-        let app_dir = self.app_dir.join(&self.app_name);
         UnitsSpec {
             app_name: self.app_name,
             processes: self.processes,
             accessories: self.accessories,
             systemd_dir: self.systemd_dir,
-            app_dir,
+            app_dir: self.app_dir,
             env_file: self.env_file,
         }
     }
