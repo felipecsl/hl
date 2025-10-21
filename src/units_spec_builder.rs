@@ -155,8 +155,7 @@ fn render_target(app: &str, processes: &[String], has_acc: bool) -> String {
         &mut unit,
         r#"[Unit]
 Description=App {app} stack
-After=docker.service network-online.target
-Requires=docker.service
+After=default.target
 Wants={wants}
 "#,
         app = app,
@@ -166,7 +165,7 @@ Wants={wants}
     writeln!(
         &mut unit,
         r#"[Install]
-WantedBy=multi-user.target"#
+WantedBy=default.target"#
     )
     .unwrap();
     unit
@@ -195,12 +194,13 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         &mut body,
         r#"[Unit]
 Description=App {app} accessories (Redis/Postgres/etc.)
-After=docker.service network-online.target
+After=default.target
 Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'
 Environment=PROJECT_NAME={project}
 Environment=COMPOSE_BASE={base}
 Environment=COMPOSE_ACC={acc_files}
@@ -210,7 +210,7 @@ ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${
 Restart=no
 
 [Install]
-WantedBy=multi-user.target"#,
+WantedBy=default.target"#,
         app = app,
         project = project,
         base = base.display(),
@@ -227,10 +227,7 @@ fn render_process_service(spec: &UnitsSpec, proc_name: &str) -> String {
     let project = app; // app project
     let base = app_dir.join("compose.yml");
     let overlay = app_dir.join(format!("compose.{proc}.yml", proc = proc_name));
-    let mut after = vec![
-        "docker.service".to_string(),
-        "network-online.target".to_string(),
-    ];
+    let mut after = vec!["default.target".to_string()];
     let mut wants = Vec::new();
     if !spec.accessories.is_empty() {
         after.push(format!("app-{}-acc.service", spec.app_name));
@@ -260,6 +257,7 @@ Wants={wants}
     writeln!(&mut unit, r#"[Service]"#).unwrap();
     writeln!(&mut unit, "Type=oneshot").unwrap();
     writeln!(&mut unit, "RemainAfterExit=yes").unwrap();
+    writeln!(&mut unit, "ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo \"Docker unavailable\" >&2; exit 1'").unwrap();
     writeln!(
         &mut unit,
         "Environment=PROJECT_NAME={}",
