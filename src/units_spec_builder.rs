@@ -182,10 +182,7 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         .map(|a| {
             format!(
                 "  -f {}",
-                app_dir
-                    .join(format!("compose.{a}.yml"))
-                    .display()
-                    .to_string()
+                app_dir.join(format!("compose.{a}.yml")).display()
             )
         })
         .collect::<Vec<_>>()
@@ -510,7 +507,7 @@ WantedBy=default.target\n";
         let web_path = systemd_dir.join("app-simpleapp-web.service");
         let web_content = fs::read_to_string(&web_path)?;
         let expected_web = format!(
-           r#"[Unit]
+            r#"[Unit]
 Description=App simpleapp web process
 After=default.target
 Wants=
