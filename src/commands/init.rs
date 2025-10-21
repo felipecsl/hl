@@ -59,7 +59,7 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
     // We need it here so that the init command creates all necessary files and accessories can boot up correctly
     write_process_compose_files(&dir, None, &opts.app, &opts.resolver).await?;
     write_config_file(&opts).await?;
-    write_unit(&opts.app, &[], &[]).await?;
+    write_unit(&opts.app, &["web".to_string()], &[]).await?;
 
     ok(&format!(
         "created app {} (will be enabled on first deploy)",

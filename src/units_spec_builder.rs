@@ -181,12 +181,12 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         .iter()
         .map(|a| {
             app_dir
-                .join(format!("compose.{a}.yml"))
+                .join(format!("-f compose.{a}.yml"))
                 .display()
                 .to_string()
         })
         .collect::<Vec<_>>()
-        .join(":");
+        .join(" ");
 
     let mut body = String::new();
     writeln!(
@@ -203,8 +203,8 @@ Environment=PROJECT_NAME={project}
 Environment=COMPOSE_BASE={base}
 Environment=COMPOSE_ACC={acc_files}
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_ACC}} up -d
-ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_ACC}} stop
+ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} ${{COMPOSE_ACC}} up -d
+ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} ${{COMPOSE_ACC}} stop
 Restart=no
 
 [Install]
