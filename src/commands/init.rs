@@ -49,7 +49,11 @@ pub async fn execute(opts: InitArgs) -> Result<()> {
     }
 
     write_base_compose_file(&dir, &opts.app, &opts.image, &opts.network).await?;
-    log(&format!( "wrote {} and {}", compose_path.display(), env_path.display() ));
+    log(&format!(
+        "wrote {} and {}",
+        compose_path.display(),
+        env_path.display()
+    ));
 
     // Write a default compose.web.yml (this might be overwritten later upon deploy if a Procfile is present)
     // We need it here so that the init command creates all necessary files and accessories can boot up correctly
@@ -120,6 +124,6 @@ secrets:
 
     let hl_yml_path = dir.join("hl.yml");
     fs::write(&hl_yml_path, hl_yml).await?;
-    log(&format!( "wrote {}", hl_yml_path.display() ));
+    log(&format!("wrote {}", hl_yml_path.display()));
     Ok(())
 }
