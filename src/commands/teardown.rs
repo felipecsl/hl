@@ -1,3 +1,5 @@
+use std::{path::Path, process::Stdio};
+
 use anyhow::Result;
 use clap::Args;
 use hl::{
@@ -5,7 +7,7 @@ use hl::{
     log::*,
     systemd::{reload_systemd_daemon, stop_app_target},
 };
-use tokio::fs;
+use tokio::{fs, process::Command};
 
 #[derive(Args)]
 pub struct TeardownArgs {
@@ -127,6 +129,12 @@ async fn remove_app_dir(app: &str) -> Result<()> {
 
     if app_path.exists() {
         debug(&format!("removing app directory: {}", app_path.display()));
+
+        // First, try to remove volume directories owned by container users (e.g., pgdata, redisdata)
+        // by using Docker to delete them with proper permissions
+        remove_accessory_data_volumes(&app_path).await?;
+
+        // Now remove the entire app directory
         fs::remove_dir_all(&app_path).await?;
         log(&format!("removed app directory: {}", app_path.display()));
     } else {
@@ -136,5 +144,45 @@ async fn remove_app_dir(app: &str) -> Result<()> {
         ));
     }
 
+    Ok(())
+}
+
+async fn remove_accessory_data_volumes(app_path: &Path) -> Result<()> {
+    // TODO: Consider extracting these volume names to constants or config (consistent with usage at accessory.rs)
+    let volume_dirs = vec!["pgdata", "redisdata"];
+    for volume_dir in volume_dirs {
+        let volume_path = app_path.join(volume_dir);
+        if volume_path.exists() {
+            debug(&format!(
+                "removing volume directory via Docker: {}",
+                volume_path.display()
+            ));
+
+            let args = [
+                "run",
+                "--rm",
+                "-v",
+                &format!("{}:/data", volume_path.display()),
+                "alpine:latest",
+                "rm",
+                "-rf",
+                "/data",
+            ];
+            let status = Command::new("docker")
+                .args(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await?;
+
+            if !status.success() {
+                debug(&format!(
+                    "warning: failed to remove {} via Docker, will try direct removal",
+                    volume_path.display()
+                ));
+            }
+        }
+    }
     Ok(())
 }
