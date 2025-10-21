@@ -181,17 +181,17 @@ This creates:
 - `/home/<user>/prj/apps/recipes/{compose.yml,.env,hl.yml}`
 - `app-recipes.service` (enabled)
 
-### 2) Secrets
+### 2) Environment Variables
 
 ```bash
-hl secrets set recipes RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
-hl secrets ls recipes  # prints keys with values redacted
+hl env set recipes RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
+hl env ls recipes  # prints keys with values redacted
 ```
 
 ### 3) Add Postgres (optional)
 
 ```bash
-hl accessories add recipes postgres --version 16
+hl accessory add recipes postgres --version 16
 # Writes compose.postgres.yml, updates systemd, restarts.
 ```
 
@@ -266,7 +266,7 @@ Retags `:latest` to the specified sha, restarts, and health-checks.
 
 ---
 
-## Example `compose.yml` (app)
+## Example `compose.web.yml` (app)
 
 ```yaml
 services:
@@ -292,7 +292,7 @@ networks:
 
 ## Security & Operational Notes
 
-- **Secrets:** keep in `.env` with mode `0600`. Do **not** bake secrets into images.
+- **Env vars:** keep in `.env` with mode `0600`. Do **not** bake secrets into images.
 - **Registry auth:** the server must be logged in to your registry prior to deploys.
 - **Traefik network:** ensure **one canonical network name** (e.g., `traefik_proxy`) shared by Traefik and apps.
 - **Backups:** if using Postgres accessory, back up `pgdata/` and consider nightly `pg_dump`.
