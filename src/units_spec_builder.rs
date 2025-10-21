@@ -195,7 +195,6 @@ fn render_accessories_service(spec: &UnitsSpec) -> String {
         r#"[Unit]
 Description=App {app} accessories (Redis/Postgres/etc.)
 After=default.target
-Requires=docker.service
 
 [Service]
 Type=oneshot
