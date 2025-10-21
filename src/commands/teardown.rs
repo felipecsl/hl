@@ -31,11 +31,8 @@ pub async fn execute(args: TeardownArgs) -> Result<()> {
         ));
         log("   - Stop all running services (web, workers, accessories)");
         log("   - Remove systemd unit files");
-        log(&format!(
-            "   - Remove git repository: ~/prj/git/{}.git",
-            app
-        ));
-        log(&format!("   - Remove app directory: ~/prj/apps/{}", app));
+        log(&format!("   - Remove git repository: ~/hl/git/{}.git", app));
+        log(&format!("   - Remove app directory: ~/hl/apps/{}", app));
         log("");
         log("Type the app name to confirm deletion:");
 

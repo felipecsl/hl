@@ -551,10 +551,10 @@ networks:
         };
 
         let image_tag = "registry.example.com/testapp:abc1234";
-        let env_path = "/home/user/prj/apps/testapp/.env";
+        let env_path = "/home/user/hl/apps/testapp/.env";
         let args = build_migration_args(&cfg, image_tag, env_path);
         let result = args.join(" ");
-        let expected = "run --rm --env-file /home/user/prj/apps/testapp/.env -e RAILS_ENV=production --network traefik_proxy registry.example.com/testapp:abc1234 bin/rails db:migrate";
+        let expected = "run --rm --env-file /home/user/hl/apps/testapp/.env -e RAILS_ENV=production --network traefik_proxy registry.example.com/testapp:abc1234 bin/rails db:migrate";
 
         assert_eq!(
             result, expected,

@@ -20,7 +20,7 @@
 ### Key Components
 
 - **Commands** (`src/commands/`): CLI subcommands with async execution
-- **Config** (`src/config.rs`): Server-owned `hl.yml` per app at `/home/<user>/prj/apps/<app>/`
+- **Config** (`src/config.rs`): Server-owned `hl.yml` per app at `/home/<user>/hl/apps/<app>/`
 - **Docker** (`src/docker.rs`): Build, push, retag, migrations, compose operations
 - **Git** (`src/git.rs`): Deterministic commit export via `git archive | tar`
 - **Systemd** (`src/systemd.rs`): Unit file generation with auto-discovered `compose.*.yml` files
@@ -29,7 +29,7 @@
 ### File System Layout (per app)
 
 ```
-/home/<user>/prj/apps/<app>/
+/home/<user>/hl/apps/<app>/
   compose.yml                  # Main app service with Traefik labels
   compose.postgres.yml         # Optional accessory (auto-discovered)
   compose.redis.yml            # Optional accessory (auto-discovered)
@@ -39,7 +39,7 @@
 ```
 
 ```
-/home/<user>/prj/git/<app>.git/  # Bare repo with post-receive hook
+/home/<user>/hl/git/<app>.git/  # Bare repo with post-receive hook
 ```
 
 ## Critical Patterns
@@ -79,7 +79,7 @@
 ### Systemd Integration
 
 - Units named `app-<appname>.service`
-- Working directory: `/home/<user>/prj/apps/<app>`
+- Working directory: `/home/<user>/hl/apps/<app>`
 - Auto-discover all `compose.*.yml` files and chain with `-f` flags
 - Use `systemctl --user` commands for non-root deployments
 
