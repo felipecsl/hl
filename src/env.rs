@@ -27,7 +27,7 @@ pub fn load_env_file_contents(path: &std::path::Path) -> Result<HashMap<String, 
 /// If the build environment file does not exist, returns an empty map
 pub fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
   let build_env_path = build_env_file(app);
-  return if build_env_file(app).exists() {
+  if build_env_file(app).exists() {
     // Optional: warn if perms are too loose
     #[cfg(unix)]
     {
@@ -46,5 +46,5 @@ pub fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
       .with_context(|| format!("Failed to read {}", &build_env_path.display()))
   } else {
     Ok(HashMap::new())
-  };
+  }
 }
