@@ -4,7 +4,7 @@ use hl::config::{app_dir, load_config, systemd_dir};
 use hl::discovery::{discover_accessories, discover_processes};
 use hl::docker::{wait_for_postgres_ready, wait_for_redis_ready};
 use hl::log::*;
-use hl::systemd::{enable_accessories, reload_systemd_daemon, restart_app_target, write_unit};
+use hl::systemd::{apply_unit_changes, restart_app_target, write_unit};
 use rand::Rng;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
@@ -185,8 +185,7 @@ networks:
     let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
     write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include postgres compose file");
-    reload_systemd_daemon().await?;
-    enable_accessories(&opts.app).await?;
+    apply_unit_changes(&format!("app-{}-acc.service", opts.app)).await?;
     log("waiting for postgres to be ready...");
     wait_for_postgres_ready(&opts.app).await?;
     ok("postgres is ready");
@@ -289,8 +288,7 @@ networks:
     let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
     write_unit(&opts.app, &processes, &accessories).await?;
     ok("regenerated systemd unit file to include redis compose file");
-    reload_systemd_daemon().await?;
-    enable_accessories(&opts.app).await?;
+    apply_unit_changes(&format!("app-{}-acc.service", opts.app)).await?;
     log("waiting for redis to be ready...");
     wait_for_redis_ready(&opts.app).await?;
     ok("redis is ready");

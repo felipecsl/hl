@@ -67,97 +67,70 @@ pub async fn write_unit(app: &str, processes: &[String], accessories: &[String])
 
 pub async fn enable_accessories(app: &str) -> Result<()> {
     let unit = format!("app-{}-acc.service", app);
-
     debug(&format!("enabling systemd service: {}", unit));
+    systemctl_cmd(&["--user", "enable", "--now", &unit]).await
+}
 
-    // Enable and start the service (idempotent operation)
-    let status = Command::new("systemctl")
-        .args(["--user", "enable", "--now", &unit])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        anyhow::bail!("systemctl --user enable failed with status: {}", status);
-    }
-
-    debug("systemd service enabled successfully");
-
-    Ok(())
+pub async fn restart_accessories(app: &str) -> Result<()> {
+    let unit = format!("app-{}-acc.service", app);
+    debug(&format!("restarting systemd service: {}", unit));
+    systemctl_cmd(&["--user", "restart", &unit]).await
 }
 
 pub async fn start_accessories(app: &str) -> Result<()> {
     let unit = format!("app-{}-acc.service", app);
-
     debug(&format!("starting systemd service: {}", unit));
-
-    let status = Command::new("systemctl")
-        .args(["--user", "start", &unit])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        anyhow::bail!("systemctl --user start failed with status: {}", status);
-    }
-
-    debug("systemd service started successfully");
-
-    Ok(())
+    systemctl_cmd(&["--user", "start", &unit]).await
 }
 
 pub async fn restart_app_target(app: &str) -> Result<()> {
     let unit = format!("app-{}.target", app);
-
     debug(&format!("restarting systemd service: {}", unit));
-
-    let status = Command::new("systemctl")
-        .args(["--user", "restart", &unit])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        anyhow::bail!("systemctl --user restart failed with status: {}", status);
-    }
-
-    debug("systemd service restarted successfully");
-
-    Ok(())
+    systemctl_cmd(&["--user", "restart", &unit]).await
 }
 
 pub async fn reload_systemd_daemon() -> Result<()> {
-    let status = Command::new("systemctl")
-        .args(["--user", "daemon-reload"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
+    systemctl_cmd(&["--user", "daemon-reload"]).await
+}
 
-    if !status.success() {
-        anyhow::bail!(
-            "systemctl --user daemon-reload failed with status: {}",
-            status
-        );
-    }
+pub async fn stop_disable_app_target(app: &str) -> Result<()> {
+    let unit = format!("app-{}.target", app);
+    debug(&format!("stopping and disabling systemd target: {}", unit));
+    systemctl_cmd(&["--user", "stop", &unit]).await?;
+    systemctl_cmd(&["--user", "disable", &unit]).await?;
+
     Ok(())
 }
 
-pub async fn stop_app_target(app: &str) -> Result<()> {
-    let unit = format!("app-{}.target", app);
+// Lightweight status check that does NOT error on non-zero exit.
+async fn systemctl_status_ok(args: &[&str]) -> Result<bool> {
+    let status = Command::new("systemctl").args(args).status().await?;
+    Ok(status.success())
+}
 
-    debug(&format!("stopping and disabling systemd target: {}", unit));
+/// Reload unit files, then:
+/// - if `unit` is active -> enable + restart (to pick up changes)
+/// - else                -> enable --now (start if new/inactive, no extra bounce)
+pub async fn apply_unit_changes(unit: &str) -> Result<()> {
+    // 1) Make systemd read updated unit files
+    reload_systemd_daemon().await?;
+    // 2) Check if it's currently active
+    let is_active = systemctl_status_ok(&["--user", "is-active", unit]).await?;
+    if is_active {
+        // Known & running: ensure enabled, then restart to apply new unit config
+        systemctl_cmd(&["--user", "enable", unit]).await?;
+        systemctl_cmd(&["--user", "restart", unit]).await?;
+    } else {
+        // New or stopped: enable and start once (no redundant restart)
+        systemctl_cmd(&["--user", "enable", "--now", unit]).await?;
+    }
 
-    // Stop the target
+    Ok(())
+}
+
+async fn systemctl_cmd(args: &[&str]) -> Result<()> {
     let status = Command::new("systemctl")
-        .args(["--user", "stop", &unit])
+        .args(args)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -165,29 +138,8 @@ pub async fn stop_app_target(app: &str) -> Result<()> {
         .await?;
 
     if !status.success() {
-        debug(&format!(
-            "systemctl --user stop failed with status: {} (continuing anyway)",
-            status
-        ));
+        anyhow::bail!("systemctl --user {:?} failed with status: {}", args, status);
     }
-
-    // Disable the target
-    let status = Command::new("systemctl")
-        .args(["--user", "disable", &unit])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .await?;
-
-    if !status.success() {
-        debug(&format!(
-            "systemctl --user disable failed with status: {} (continuing anyway)",
-            status
-        ));
-    }
-
-    debug("stopped and disabled systemd services");
 
     Ok(())
 }

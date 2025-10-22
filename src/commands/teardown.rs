@@ -5,7 +5,7 @@ use clap::Args;
 use hl::{
     config::{app_dir, hl_git_root, systemd_dir},
     log::*,
-    systemd::{reload_systemd_daemon, stop_app_target},
+    systemd::{reload_systemd_daemon, stop_disable_app_target},
 };
 use tokio::{fs, process::Command};
 
@@ -49,7 +49,7 @@ pub async fn execute(args: TeardownArgs) -> Result<()> {
     log(&format!("tearing down app: {}", app));
 
     // Step 1: Stop and disable the app target (this stops all services)
-    stop_app_target(app).await?;
+    stop_disable_app_target(app).await?;
 
     // Step 2: Remove systemd unit files
     remove_systemd_units(app).await?;
