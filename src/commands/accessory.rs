@@ -85,6 +85,7 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
   let user = opts.user.unwrap_or_else(|| opts.app.clone());
   let database = opts.database.unwrap_or_else(|| opts.app.clone());
   let password = opts.password.unwrap_or_else(generate_password);
+  let postgres_host = format!("{app}_pg", app = opts.app);
 
   // Load config to get the network name
   let config = load_config(&opts.app).await?;
@@ -93,8 +94,8 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
   let compose_postgres = format!(
     r#"services:
   pg:
-    image: postgres:{}
-    container_name: {}_pg
+    image: postgres:{version}
+    container_name: {postgres_host}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${{POSTGRES_USER}}
@@ -102,7 +103,7 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
       POSTGRES_DB: ${{POSTGRES_DB}}
     volumes:
       - ./pgdata:/var/lib/postgresql/data
-    networks: [{}]
+    networks: [{network}]
     expose: ["5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
@@ -111,11 +112,13 @@ async fn add_postgres(opts: AddArgs) -> Result<()> {
       retries: 10
 
 networks:
-  {}:
+  {network}:
     external: true
-    name: {}
+    name: {network}
 "#,
-    version, opts.app, network, network, network
+    version = version,
+    postgres_host = postgres_host,
+    network = network
   );
 
   let postgres_compose_path = dir.join("compose.postgres.yml");
@@ -130,15 +133,6 @@ networks:
   } else {
     HashMap::new()
   };
-
-  // Build the DATABASE_URL
-  let database_url = format!(
-    "postgres://{user}:{password}@{app}_pg:5432/{database}",
-    user = user,
-    app = opts.app,
-    password = password,
-    database = database
-  );
 
   // Track if we made any changes
   let mut changed = false;
@@ -156,8 +150,8 @@ networks:
     env_content.insert("POSTGRES_DB".into(), database);
     changed = true;
   }
-  if env_content.get("DATABASE_URL") != Some(&database_url) {
-    env_content.insert("DATABASE_URL".into(), database_url);
+  if env_content.get("POSTGRES_HOST") != Some(&postgres_host) {
+    env_content.insert("POSTGRES_HOST".into(), postgres_host);
     changed = true;
   }
 
