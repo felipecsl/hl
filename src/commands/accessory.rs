@@ -133,9 +133,9 @@ networks:
 
   // Build the DATABASE_URL
   let database_url = format!(
-    "postgres://{user}:{password}@#{host}:5432/{database}",
+    "postgres://{user}:{password}@#{app}_pg:5432/{database}",
     user = user,
-    host = format!("{}_pg", opts.app),
+    app = opts.app,
     password = password,
     database = database
   );
