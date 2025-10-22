@@ -3,9 +3,11 @@ use clap::{Args, Subcommand};
 use hl::config::{app_dir, load_config, systemd_dir};
 use hl::discovery::{discover_accessories, discover_processes};
 use hl::docker::{wait_for_postgres_ready, wait_for_redis_ready};
+use hl::env::{load_env_file_contents, write_env_file_contents};
 use hl::log::*;
 use hl::systemd::{apply_unit_changes, restart_app_target, write_unit};
 use rand::Rng;
+use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
 
@@ -124,48 +126,43 @@ networks:
   // Update .env file
   let env_path = dir.join(".env");
   let mut env_content = if env_path.exists() {
-    fs::read_to_string(&env_path).await?
+    load_env_file_contents(&env_path)?
   } else {
-    String::new()
+    HashMap::new()
   };
 
-  // Check if postgres variables already exist
-  let has_postgres_user = env_content.contains("POSTGRES_USER=");
-  let has_postgres_password = env_content.contains("POSTGRES_PASSWORD=");
-  let has_postgres_db = env_content.contains("POSTGRES_DB=");
-  let has_database_url = env_content.contains("DATABASE_URL=");
-
   // Build the DATABASE_URL
-  let database_url = format!("postgres://{}:{}@pg:5432/{}", user, password, database);
+  let database_url = format!(
+    "postgres://{user}:{password}@#{host}:5432/{database}",
+    user = user,
+    host = format!("{}_pg", opts.app),
+    password = password,
+    database = database
+  );
 
-  // Append missing variables
-  let mut additions = Vec::new();
+  // Track if we made any changes
+  let mut changed = false;
 
-  if !has_postgres_user {
-    additions.push(format!("POSTGRES_USER={}", user));
+  // Append missing or modified variables
+  if env_content.get("POSTGRES_USER") != Some(&user) {
+    env_content.insert("POSTGRES_USER".into(), user);
+    changed = true;
   }
-  if !has_postgres_password {
-    additions.push(format!("POSTGRES_PASSWORD={}", password));
+  if env_content.get("POSTGRES_PASSWORD") != Some(&password) {
+    env_content.insert("POSTGRES_PASSWORD".into(), password);
+    changed = true;
   }
-  if !has_postgres_db {
-    additions.push(format!("POSTGRES_DB={}", database));
+  if env_content.get("POSTGRES_DB") != Some(&database) {
+    env_content.insert("POSTGRES_DB".into(), database);
+    changed = true;
   }
-  if !has_database_url {
-    additions.push(format!("DATABASE_URL={}", database_url));
+  if env_content.get("DATABASE_URL") != Some(&database_url) {
+    env_content.insert("DATABASE_URL".into(), database_url);
+    changed = true;
   }
 
-  if !additions.is_empty() {
-    // Ensure the file ends with a newline before appending
-    if !env_content.is_empty() && !env_content.ends_with('\n') {
-      env_content.push('\n');
-    }
-
-    env_content.push_str(&additions.join("\n"));
-    env_content.push('\n');
-
-    // Write the updated content
-    fs::write(&env_path, &env_content).await?;
-
+  if changed {
+    write_env_file_contents(&env_path, &env_content).await?;
     // Set permissions to 600
     let mut perms = fs::metadata(&env_path).await?.permissions();
     perms.set_mode(0o600);

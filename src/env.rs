@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
+use tokio::fs;
 
 use crate::{
   config::build_env_file,
@@ -19,6 +20,31 @@ pub fn load_env_file_contents(path: &std::path::Path) -> Result<HashMap<String, 
     map.insert(k, v);
   }
   Ok(map)
+}
+
+/// Write environment variable key-value pairs to a .env file
+/// # Arguments
+/// * `path` - Path to the .env file
+/// * `content` - HashMap mapping environment variable names to their values
+/// # Returns
+/// Empty result on success
+pub async fn write_env_file_contents(
+  path: &std::path::Path,
+  content: &HashMap<String, String>,
+) -> Result<()> {
+  // Convert HashMap to sorted string content
+  let mut sorted_keys: Vec<_> = content.keys().collect();
+  sorted_keys.sort();
+
+  let mut file_content = String::new();
+  for key in sorted_keys {
+    if let Some(value) = content.get(key) {
+      file_content.push_str(&format!("{}={}\n", key, value));
+    }
+  }
+
+  fs::write(&path, &file_content).await?;
+  Ok(())
 }
 
 /// Load build environment variables for the given app
