@@ -1,6 +1,7 @@
 pub mod config;
 pub mod discovery;
 pub mod docker;
+pub mod env;
 pub mod git;
 pub mod health;
 pub mod log;
