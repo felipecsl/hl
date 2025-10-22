@@ -3,6 +3,7 @@ use crate::log::debug;
 use crate::systemd::restart_app_target;
 use anyhow::Result;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Stdio;
 use tokio::fs;
@@ -50,21 +51,21 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
     }
   }
 
-  let mut args = vec!["buildx", "build", "--push"];
+  let mut args: Vec<OsString> = vec!["buildx".into(), "build".into(), "--push".into()];
 
   if let Some(platforms) = &opts.platforms {
-    args.push("--platform");
-    args.push(platforms);
+    args.push("--platform".into());
+    args.push(platforms.into());
   }
 
   for tag in &opts.tags {
-    args.push("-t");
-    args.push(tag);
+    args.push("-t".into());
+    args.push(tag.into());
   }
 
   if let Some(dockerfile) = &opts.dockerfile {
-    args.push("--file");
-    args.push(dockerfile);
+    args.push("--file".into());
+    args.push(dockerfile.into());
   }
 
   // Collect env just for docker child
@@ -72,19 +73,23 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
 
   for s in &opts.secrets {
     // don't log the value
-    args.push("--secret");
-    // BuildKit supports env=KEY to pull from the process env of the docker command
-    let spec = format!("id={},env={}", s.id, s.value);
-    args.push(Box::leak(spec.into_boxed_str())); // lifetime trick since args is Vec<&str>
+    args.push("--secret".into());
+    // BuildKit supports id=KEY to pull from the process env var of the docker command with the same key as `id`
+    let spec = format!("id={}", s.id);
+    args.push(spec.into()); // lifetime trick since args is Vec<&str>
     docker_child_env.insert(s.id.clone(), s.value.clone());
   }
 
-  args.push(&opts.context);
+  args.push(opts.context.into());
 
   // DO NOT log secrets; this is safe:
   debug(&format!(
     "executing docker command: docker {}",
-    args.join(" ")
+    args
+      .iter()
+      .map(|arg| arg.to_string_lossy())
+      .collect::<Vec<_>>()
+      .join(" ")
   ));
 
   let mut cmd = Command::new("docker");

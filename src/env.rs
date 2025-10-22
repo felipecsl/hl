@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 
-use crate::{config::build_env_file, log::debug};
+use crate::{
+  config::build_env_file,
+  log::{debug, log},
+};
 
 /// Read environment variable key-value pairs from a .env (or .env.build) file
 /// # Arguments
@@ -26,6 +29,7 @@ pub fn load_env_file_contents(path: &std::path::Path) -> Result<HashMap<String, 
 /// # Notes
 /// If the build environment file does not exist, returns an empty map
 pub fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
+  log("loading build environment secrets...");
   let build_env_path = build_env_file(app);
   if build_env_file(app).exists() {
     // Optional: warn if perms are too loose

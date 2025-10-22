@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use hl::{
-  config::{app_dir, build_env_file, hl_git_root, load_config, systemd_dir},
+  config::{app_dir, hl_git_root, load_config, systemd_dir},
   discovery::discover_accessories,
   docker::*,
   env::load_build_env_contents,
@@ -90,7 +90,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   debug(&format!("build context: {}", worktree.display()));
 
   // load build-time secrets from .env.build
-  let secrets_map = load_build_env_contents(&build_env_file(&opts.app).display().to_string())?;
+  let secrets_map = load_build_env_contents(&opts.app)?;
   let secrets = secrets_map
     .into_iter()
     .map(|(k, v)| BuildSecret::from_kv(&k, &v))
