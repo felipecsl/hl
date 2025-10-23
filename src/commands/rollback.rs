@@ -31,14 +31,8 @@ pub async fn execute(args: RollbackArgs) -> Result<()> {
   let accessories = discover_accessories(&systemd_dir, &app_dir(&args.app), &args.app, &processes)?;
   restart_compose(&cfg, &processes, &accessories).await?;
 
-  log("waiting for health");
-  wait_for_healthy(
-    &cfg.network,
-    &cfg.health.url,
-    &cfg.health.timeout,
-    &cfg.health.interval,
-  )
-  .await?;
+  log("waiting for healthchecks to pass");
+  wait_for_healthy(&cfg).await?;
 
   ok("rollback complete");
   Ok(())

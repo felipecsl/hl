@@ -4,6 +4,7 @@ use tokio::fs;
 
 use crate::{
   config::build_env_file,
+  docker::BuildSecret,
   log::{debug, log},
 };
 
@@ -54,7 +55,7 @@ pub async fn write_env_file_contents(
 /// HashMap mapping environment variable names to their values
 /// # Notes
 /// If the build environment file does not exist, returns an empty map
-pub fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
+fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
   log("loading build environment secrets...");
   let build_env_path = build_env_file(app);
   if build_env_file(app).exists() {
@@ -77,4 +78,14 @@ pub fn load_build_env_contents(app: &str) -> Result<HashMap<String, String>> {
   } else {
     Ok(HashMap::new())
   }
+}
+
+pub fn load_build_secrets(app: &str) -> Result<Vec<BuildSecret>> {
+  let secrets_map = load_build_env_contents(app)?;
+  Ok(
+    secrets_map
+      .into_iter()
+      .map(|(k, v)| BuildSecret::from_kv(&k, &v))
+      .collect::<Vec<BuildSecret>>(),
+  )
 }
