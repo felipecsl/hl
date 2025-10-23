@@ -283,7 +283,7 @@ PartOf=app-{app}.target
   // Start only the named service; scale (optional) for worker
   writeln!(
         &mut unit,
-        "ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d {svc}",
+        "ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d {svc} --remove-orphans",
         svc = proc_name
     ).unwrap();
 
