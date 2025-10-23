@@ -77,13 +77,19 @@ async fn cleanup_orphaned_units_impl(
 
     log(&format!("Found orphaned unit: {}", unit_name));
 
-    // Stop the service (ignore errors if already stopped)
-    debug(&format!("Stopping service: {}", unit_name));
-    let _ = systemctl_status_ok(&["--user", "stop", &unit_name]).await;
+    // Stop the service (log warning if it fails, but don't propagate error)
+    let _ = systemctl_status_ok(
+      &["--user", "stop", &unit_name],
+      Some(&format!("stop {}", unit_name)),
+    )
+    .await;
 
-    // Disable the service (ignore errors if already disabled)
-    debug(&format!("Disabling service: {}", unit_name));
-    let _ = systemctl_status_ok(&["--user", "disable", &unit_name]).await;
+    // Disable the service (log warning if it fails, but don't propagate error)
+    let _ = systemctl_status_ok(
+      &["--user", "disable", &unit_name],
+      Some(&format!("disable {}", unit_name)),
+    )
+    .await;
 
     // Delete the unit file
     debug(&format!("Deleting unit file: {}", unit_path.display()));
@@ -174,9 +180,36 @@ pub async fn stop_disable_app_target(app: &str) -> Result<()> {
 }
 
 // Lightweight status check that does NOT error on non-zero exit.
-async fn systemctl_status_ok(args: &[&str]) -> Result<bool> {
-  let status = Command::new("systemctl").args(args).status().await?;
-  Ok(status.success())
+// When operation_desc is provided, logs warnings on failure.
+async fn systemctl_status_ok(args: &[&str], operation_desc: Option<&str>) -> Result<bool> {
+  let status = Command::new("systemctl").args(args).status().await;
+
+  match status {
+    Ok(s) if s.success() => {
+      if let Some(desc) = operation_desc {
+        debug(&format!("Successfully {}", desc));
+      }
+      Ok(true)
+    }
+    Ok(_) => {
+      if let Some(desc) = operation_desc {
+        log(&format!(
+          "Warning: Failed to {} - may require manual intervention",
+          desc
+        ));
+      }
+      Ok(false)
+    }
+    Err(e) => {
+      if let Some(desc) = operation_desc {
+        log(&format!(
+          "Warning: Error trying to {}: {} - this could indicate permission issues",
+          desc, e
+        ));
+      }
+      Err(e.into())
+    }
+  }
 }
 
 /// Reload unit files, then:
@@ -186,7 +219,7 @@ pub async fn apply_unit_changes(unit: &str) -> Result<()> {
   // 1) Make systemd read updated unit files
   reload_systemd_daemon().await?;
   // 2) Check if it's currently active
-  let is_active = systemctl_status_ok(&["--user", "is-active", unit]).await?;
+  let is_active = systemctl_status_ok(&["--user", "is-active", unit], None).await?;
   if is_active {
     // Known & running: ensure enabled, then restart to apply new unit config
     systemctl_cmd(&["--user", "enable", unit]).await?;
