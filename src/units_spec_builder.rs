@@ -425,7 +425,7 @@ Environment=COMPOSE_BASE={app_dir}/compose.yml
 Environment=COMPOSE_OVERLAYS={app_dir}/compose.web.yml
 EnvironmentFile=-{app_dir}/.env
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web
+ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web --remove-orphans
 ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop web
 Restart=no
 
@@ -456,7 +456,7 @@ Environment=COMPOSE_BASE={app_dir}/compose.yml
 Environment=COMPOSE_OVERLAYS={app_dir}/compose.worker.yml
 EnvironmentFile=-{app_dir}/.env
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d worker
+ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d worker --remove-orphans
 ExecStartPost=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d --scale worker=${{WORKER_SCALE:-1}} worker
 ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop worker
 Restart=no
@@ -526,7 +526,7 @@ Environment=PROJECT_NAME=simpleapp
 Environment=COMPOSE_BASE={app_dir}/compose.yml
 Environment=COMPOSE_OVERLAYS={app_dir}/compose.web.yml
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web
+ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web --remove-orphans
 ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop web
 Restart=no
 
