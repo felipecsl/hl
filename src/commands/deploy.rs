@@ -4,7 +4,7 @@ use hl::{
   config::{app_dir, hl_git_root, load_config, systemd_dir},
   discovery::discover_accessories,
   docker::*,
-  env::load_build_env_contents,
+  env::load_build_secrets,
   git::export_commit,
   health::wait_for_healthy,
   log::*,
@@ -91,11 +91,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   debug(&format!("build context: {}", worktree.display()));
 
   // load build-time secrets from .env.build
-  let secrets_map = load_build_env_contents(&opts.app)?;
-  let secrets = secrets_map
-    .into_iter()
-    .map(|(k, v)| BuildSecret::from_kv(&k, &v))
-    .collect::<Vec<BuildSecret>>();
+  let secrets = load_build_secrets(&opts.app)?;
 
   build_and_push(BuildPushOptions {
     context: worktree.to_string_lossy().to_string(),
@@ -121,14 +117,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   log("restarting services");
   restart_compose(&cfg, &process_names, &accessories).await?;
 
-  log("waiting for health");
-  wait_for_healthy(
-    &cfg.network,
-    &cfg.health.url,
-    &cfg.health.timeout,
-    &cfg.health.interval,
-  )
-  .await?;
+  log("waiting for healthchecks to pass");
+  wait_for_healthy(&cfg).await?;
 
   // Clean up the temporary worktree
   if let Err(e) = tokio::fs::remove_dir_all(&worktree).await {

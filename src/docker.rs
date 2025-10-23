@@ -76,7 +76,7 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
     args.push("--secret".into());
     // BuildKit supports id=KEY to pull from the process env var of the docker command with the same key as `id`
     let spec = format!("id={}", s.id);
-    args.push(spec.into()); // lifetime trick since args is Vec<&str>
+    args.push(spec.into());
     docker_child_env.insert(s.id.clone(), s.value.clone());
   }
 
@@ -315,11 +315,97 @@ networks:
   Ok(())
 }
 
+/// Clean up orphaned process compose files that are no longer needed.
+///
+/// This function:
+/// 1. Scans the directory for compose.*.yml files (excluding compose.yml and accessory files)
+/// 2. Identifies orphaned compose files (not in current processes list)
+/// 3. Deletes the orphaned compose file
+/// 4. Logs all actions
+async fn cleanup_orphaned_compose_files(
+  dir: &Path,
+  processes: Option<&std::collections::HashMap<String, String>>,
+) -> Result<()> {
+  // Read directory entries
+  let entries = match tokio::fs::read_dir(dir).await {
+    Ok(entries) => entries,
+    Err(e) => {
+      debug(&format!(
+        "Could not read directory {}: {}",
+        dir.display(),
+        e
+      ));
+      return Ok(());
+    }
+  };
+
+  // Build set of expected process compose files
+  let mut expected_files = std::collections::HashSet::new();
+  if let Some(procs) = processes {
+    for process_name in procs.keys() {
+      expected_files.insert(format!("compose.{}.yml", process_name));
+    }
+  } else {
+    // Default web process
+    expected_files.insert("compose.web.yml".to_string());
+  }
+
+  // Known accessory files to preserve
+  let accessory_files = ["compose.postgres.yml", "compose.redis.yml"];
+
+  // Find orphaned compose files
+  let mut entries_stream = entries;
+  while let Some(entry) = entries_stream.next_entry().await? {
+    let file_name = entry.file_name();
+    let file_name_str = file_name.to_string_lossy();
+
+    // Only consider compose.*.yml files (exclude base compose.yml and accessories)
+    if !file_name_str.starts_with("compose.") || !file_name_str.ends_with(".yml") {
+      continue;
+    }
+
+    // Skip the base compose.yml
+    if file_name_str == "compose.yml" {
+      continue;
+    }
+
+    // Skip known accessory files
+    if accessory_files.contains(&file_name_str.as_ref()) {
+      continue;
+    }
+
+    // Skip if this is an expected process file
+    if expected_files.contains(file_name_str.as_ref()) {
+      continue;
+    }
+
+    // Found an orphaned compose file
+    let file_path = entry.path();
+    debug(&format!("Found orphaned compose file: {}", file_name_str));
+
+    // Delete the compose file
+    if let Err(e) = tokio::fs::remove_file(&file_path).await {
+      crate::log::log(&format!(
+        "Warning: Could not delete {}: {}",
+        file_path.display(),
+        e
+      ));
+    } else {
+      crate::log::log(&format!("Deleted orphaned compose file: {}", file_name_str));
+    }
+  }
+
+  Ok(())
+}
+
 /// Generate process-specific compose files from a Procfile
 ///
 /// For each process in the map, creates a `compose.{process}.yml` file
 /// with the process name and command. If processes is None, creates a
 /// default `compose.web.yml` with no command override.
+///
+/// This function first cleans up any orphaned compose files, then generates
+/// and writes the necessary compose files based on the provided processes.
 ///
 /// # Arguments
 /// * `dir` - Directory where compose files should be written
@@ -332,6 +418,9 @@ pub async fn write_process_compose_files(
   app: &str,
   resolver: &str,
 ) -> Result<()> {
+  // Clean up orphaned compose files before writing new ones
+  cleanup_orphaned_compose_files(dir, processes).await?;
+
   if let Some(procs) = processes {
     // Generate a compose file for each process
     for (process_name, command) in procs {
@@ -766,5 +855,202 @@ services:
       result, expected,
       "Complex command should be parsed correctly"
     );
+  }
+
+  #[tokio::test]
+  async fn test_cleanup_orphaned_compose_files() -> Result<()> {
+    use std::collections::HashMap;
+
+    let temp_dir = TempDir::new()?;
+    let dir_path = temp_dir.path();
+
+    // Create some orphaned compose files
+    let orphaned_files = vec!["compose.oldworker.yml", "compose.deprecated.yml"];
+
+    for file_name in &orphaned_files {
+      let file_path = dir_path.join(file_name);
+      fs::write(&file_path, "# orphaned file").await?;
+    }
+
+    // Create base compose.yml (should not be deleted)
+    fs::write(dir_path.join("compose.yml"), "# base").await?;
+
+    // Create accessory files (should not be deleted)
+    fs::write(dir_path.join("compose.postgres.yml"), "# postgres").await?;
+    fs::write(dir_path.join("compose.redis.yml"), "# redis").await?;
+
+    // Create a non-compose file (should not be deleted)
+    fs::write(dir_path.join("other.yml"), "# other").await?;
+
+    // Verify orphaned files exist
+    for file_name in &orphaned_files {
+      assert!(
+        dir_path.join(file_name).exists(),
+        "{} should exist before cleanup",
+        file_name
+      );
+    }
+
+    // Now write process compose files with only web and worker
+    let mut processes = HashMap::new();
+    processes.insert("web".to_string(), "bundle exec rails server".to_string());
+    processes.insert("worker".to_string(), "bundle exec sidekiq".to_string());
+
+    write_process_compose_files(dir_path, Some(&processes), "testapp", "myresolver").await?;
+
+    // Verify orphaned files are deleted
+    for file_name in &orphaned_files {
+      assert!(
+        !dir_path.join(file_name).exists(),
+        "{} should be deleted",
+        file_name
+      );
+    }
+
+    // Verify base compose.yml still exists
+    assert!(
+      dir_path.join("compose.yml").exists(),
+      "compose.yml should not be deleted"
+    );
+
+    // Verify accessory files still exist
+    assert!(
+      dir_path.join("compose.postgres.yml").exists(),
+      "compose.postgres.yml should not be deleted"
+    );
+    assert!(
+      dir_path.join("compose.redis.yml").exists(),
+      "compose.redis.yml should not be deleted"
+    );
+
+    // Verify other files still exist
+    assert!(
+      dir_path.join("other.yml").exists(),
+      "other.yml should not be deleted"
+    );
+
+    // Verify current process files exist
+    assert!(
+      dir_path.join("compose.web.yml").exists(),
+      "compose.web.yml should exist"
+    );
+    assert!(
+      dir_path.join("compose.worker.yml").exists(),
+      "compose.worker.yml should exist"
+    );
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_cleanup_orphaned_compose_files_without_procfile() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let dir_path = temp_dir.path();
+
+    // Create orphaned process files
+    fs::write(dir_path.join("compose.worker.yml"), "# orphaned worker").await?;
+    fs::write(dir_path.join("compose.release.yml"), "# orphaned release").await?;
+
+    // Create accessory file (should not be deleted)
+    fs::write(dir_path.join("compose.postgres.yml"), "# postgres").await?;
+
+    assert!(
+      dir_path.join("compose.worker.yml").exists(),
+      "worker should exist before cleanup"
+    );
+    assert!(
+      dir_path.join("compose.release.yml").exists(),
+      "release should exist before cleanup"
+    );
+
+    // Call with None (default web process only)
+    write_process_compose_files(dir_path, None, "testapp", "myresolver").await?;
+
+    // Verify orphaned files are deleted
+    assert!(
+      !dir_path.join("compose.worker.yml").exists(),
+      "compose.worker.yml should be deleted when no Procfile"
+    );
+    assert!(
+      !dir_path.join("compose.release.yml").exists(),
+      "compose.release.yml should be deleted when no Procfile"
+    );
+
+    // Verify web process exists
+    assert!(
+      dir_path.join("compose.web.yml").exists(),
+      "compose.web.yml should exist"
+    );
+
+    // Verify accessory file still exists
+    assert!(
+      dir_path.join("compose.postgres.yml").exists(),
+      "compose.postgres.yml should not be deleted"
+    );
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_cleanup_preserves_current_compose_files() -> Result<()> {
+    use std::collections::HashMap;
+
+    let temp_dir = TempDir::new()?;
+    let dir_path = temp_dir.path();
+
+    // Create current process files
+    fs::write(dir_path.join("compose.web.yml"), "# old web").await?;
+    fs::write(dir_path.join("compose.worker.yml"), "# old worker").await?;
+
+    // Create orphaned file
+    fs::write(dir_path.join("compose.cron.yml"), "# orphaned cron").await?;
+
+    let mut processes = HashMap::new();
+    processes.insert("web".to_string(), "bundle exec rails server".to_string());
+    processes.insert("worker".to_string(), "bundle exec sidekiq".to_string());
+
+    write_process_compose_files(dir_path, Some(&processes), "testapp", "myresolver").await?;
+
+    // Verify current files are updated (still exist)
+    assert!(
+      dir_path.join("compose.web.yml").exists(),
+      "compose.web.yml should be preserved"
+    );
+    assert!(
+      dir_path.join("compose.worker.yml").exists(),
+      "compose.worker.yml should be preserved"
+    );
+
+    // Verify orphaned is deleted
+    assert!(
+      !dir_path.join("compose.cron.yml").exists(),
+      "compose.cron.yml should be deleted"
+    );
+
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_cleanup_handles_missing_directory() -> Result<()> {
+    use std::collections::HashMap;
+
+    let temp_dir = TempDir::new()?;
+    let nonexistent_dir = temp_dir.path().join("nonexistent");
+
+    let mut processes = HashMap::new();
+    processes.insert("web".to_string(), "bundle exec rails server".to_string());
+
+    // Should handle missing directory gracefully (cleanup will skip, but write will fail)
+    let result =
+      write_process_compose_files(&nonexistent_dir, Some(&processes), "testapp", "myresolver")
+        .await;
+
+    // The write operation should fail because directory doesn't exist
+    assert!(
+      result.is_err(),
+      "Should error when trying to write to non-existent directory"
+    );
+
+    Ok(())
   }
 }

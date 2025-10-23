@@ -1,15 +1,14 @@
-use crate::config::parse_duration;
+use crate::config::{parse_duration, HLConfig};
 use anyhow::Result;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 use tokio::{process::Command, time::sleep};
 
-pub async fn wait_for_healthy(
-  network: &str,
-  url: &str,
-  timeout: &str,
-  interval: &str,
-) -> Result<()> {
+pub async fn wait_for_healthy(cfg: &HLConfig) -> Result<()> {
+  let network = &cfg.network;
+  let url = &cfg.health.url;
+  let timeout = &cfg.health.timeout;
+  let interval = &cfg.health.interval;
   let timeout_ms = parse_duration(timeout)?;
   let interval_ms = parse_duration(interval)?;
   let timeout_duration = Duration::from_millis(timeout_ms);
