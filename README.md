@@ -146,7 +146,7 @@ services:
 
 ## Accessories (Example: Postgres)
 
-`hl accessories add <app> postgres` will:
+`hl accessory add <app> postgres` will:
 
 - Write `compose.postgres.yml` with a healthy `pg` service on the same network.
 - Add `depends_on: { pg: { condition: service_healthy } }` to your app (via the fragment).
@@ -183,8 +183,10 @@ This creates:
 
 ### 2) Environment Variables
 
+Add optional `--build` for build-time env vars (e.g., docker build secrets).
+
 ```bash
-hl env set recipes RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
+hl env set [--build] recipes RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
 hl env ls recipes  # prints keys with values redacted
 ```
 
@@ -197,22 +199,13 @@ hl accessory add recipes postgres --version 16
 
 ### 4) Create a bare repo + hook (one-time)
 
-On the server (paths are examples):
+On the server:
 
 ```
 /home/<user>/hl/git/recipes.git/hooks/post-receive
 ```
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-while read -r oldrev newrev refname; do
-  case "$refname" in refs/heads/*) branch="${refname#refs/heads/}" ;; *) continue ;; esac
-  hl deploy --app recipes --sha "$newrev" --branch "$branch"
-done
-```
-
-`chmod +x hooks/post-receive`.
+Triggers `hl deploy --app <appname> --sha "$newrev" --branch "$branch"`
 
 ### 5) Push to deploy
 
@@ -258,10 +251,10 @@ Retags `:latest` to the specified sha, restarts, and health-checks.
   Update the app’s `.env` (0600).
   `hl secrets ls <app>` to list keys redacted.
 
-- `hl accessories add <app> postgres [--version <v>] [--user <u>] [--db <name>] [--password <p>]`
+- `hl accessory add <app> postgres [--version <v>] [--user <u>] [--db <name>] [--password <p>]`
   Add Postgres as an accessory and wire `DATABASE_URL`.
 
-- `hl accessories add <app> redis [--version <v>]`
+- `hl accessory add <app> redis [--version <v>]`
   Add Redis as an accessory and wire `REDIS_URL`.
 
 ---
