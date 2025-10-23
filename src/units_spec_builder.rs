@@ -258,58 +258,40 @@ PartOf=app-{app}.target
   )
   .unwrap();
 
-  writeln!(&mut unit, r#"[Service]"#).unwrap();
-  writeln!(&mut unit, "Type=oneshot").unwrap();
-  writeln!(&mut unit, "RemainAfterExit=yes").unwrap();
-  writeln!(&mut unit, r#"ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'"#).unwrap();
   writeln!(
     &mut unit,
-    "Environment=PROJECT_NAME={}",
-    systemd_escape(project)
-  )
-  .unwrap();
-  writeln!(&mut unit, "Environment=COMPOSE_BASE={}", base.display()).unwrap();
-  writeln!(
-    &mut unit,
-    "Environment=COMPOSE_OVERLAYS={}",
-    overlay.display()
+    r#"[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'"#
   )
   .unwrap();
   if let Some(env_file) = &spec.env_file {
     writeln!(&mut unit, "EnvironmentFile=-{}", env_file.display()).unwrap();
   }
-  writeln!(&mut unit, "WorkingDirectory={}", app_dir.display()).unwrap();
-
-  // Start only the named service; scale (optional) for worker
-  writeln!(
-        &mut unit,
-        "ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d {svc} --remove-orphans",
-        svc = proc_name
-    ).unwrap();
-
-  // Optional post-scale: only meaningful if you put WORKER_SCALE into env_file and this is "worker"
-  if proc_name == "worker" {
-    writeln!(
-            &mut unit,
-            "ExecStartPost=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d --scale {svc}=${{WORKER_SCALE:-1}} {svc}",
-            svc = proc_name
-        ).unwrap();
-  }
-
-  writeln!(
-        &mut unit,
-        "ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop {svc}",
-        svc = proc_name
-    )
-    .unwrap();
-  writeln!(&mut unit, "Restart=no").unwrap();
 
   writeln!(
     &mut unit,
-    r#"
+    r#"WorkingDirectory={working_dir}
+ExecStart=/usr/bin/docker compose -p {project} \
+  -f {base} \
+  -f {overlay} \
+  up -d {svc} \
+  --remove-orphans
+ExecStop=/usr/bin/docker compose -p {project} \
+  -f {base} \
+  -f {overlay} \
+  stop {svc}
+Restart=no
+
 [Install]
-WantedBy=app-{}.target"#,
-    app
+WantedBy=app-{app}.target"#,
+    working_dir = app_dir.display(),
+    app = app,
+    svc = proc_name,
+    project = systemd_escape(project),
+    base = base.display(),
+    overlay = overlay.display()
   )
   .unwrap();
 
@@ -420,13 +402,17 @@ PartOf=app-testapp.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'
-Environment=PROJECT_NAME=testapp
-Environment=COMPOSE_BASE={app_dir}/compose.yml
-Environment=COMPOSE_OVERLAYS={app_dir}/compose.web.yml
 EnvironmentFile=-{app_dir}/.env
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web --remove-orphans
-ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop web
+ExecStart=/usr/bin/docker compose -p testapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.web.yml \
+  up -d web \
+  --remove-orphans
+ExecStop=/usr/bin/docker compose -p testapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.web.yml \
+  stop web
 Restart=no
 
 [Install]
@@ -451,14 +437,17 @@ PartOf=app-testapp.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'
-Environment=PROJECT_NAME=testapp
-Environment=COMPOSE_BASE={app_dir}/compose.yml
-Environment=COMPOSE_OVERLAYS={app_dir}/compose.worker.yml
 EnvironmentFile=-{app_dir}/.env
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d worker --remove-orphans
-ExecStartPost=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d --scale worker=${{WORKER_SCALE:-1}} worker
-ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop worker
+ExecStart=/usr/bin/docker compose -p testapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.worker.yml \
+  up -d worker \
+  --remove-orphans
+ExecStop=/usr/bin/docker compose -p testapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.worker.yml \
+  stop worker
 Restart=no
 
 [Install]
@@ -522,12 +511,16 @@ PartOf=app-simpleapp.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/usr/bin/bash -lc 'for i in {{1..30}}; do docker version >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Docker unavailable" >&2; exit 1'
-Environment=PROJECT_NAME=simpleapp
-Environment=COMPOSE_BASE={app_dir}/compose.yml
-Environment=COMPOSE_OVERLAYS={app_dir}/compose.web.yml
 WorkingDirectory={app_dir}
-ExecStart=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} up -d web --remove-orphans
-ExecStop=/usr/bin/docker compose -p ${{PROJECT_NAME}} -f ${{COMPOSE_BASE}} -f ${{COMPOSE_OVERLAYS}} stop web
+ExecStart=/usr/bin/docker compose -p simpleapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.web.yml \
+  up -d web \
+  --remove-orphans
+ExecStop=/usr/bin/docker compose -p simpleapp \
+  -f {app_dir}/compose.yml \
+  -f {app_dir}/compose.web.yml \
+  stop web
 Restart=no
 
 [Install]
