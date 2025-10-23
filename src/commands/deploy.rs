@@ -61,6 +61,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   log("generating process compose files");
   let app_directory = app_dir(&cfg.app);
   write_process_compose_files(&app_directory, processes.as_ref(), &cfg.app, &cfg.resolver).await?;
+
   let systemd_dir = systemd_dir();
   let process_names = processes
     .map(|p| p.keys().cloned().collect::<Vec<String>>())
@@ -105,21 +106,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   })
   .await?;
 
-  if !accessories.is_empty() {
-    // Ensure accessories are started and ready before running migrations
-    log("enabling and starting accessories");
-    start_accessories(&cfg.app).await?;
-    if accessories.contains(&"postgres".to_string()) {
-      log("waiting for postgres to be ready...");
-      wait_for_postgres_ready(&cfg.app).await?;
-      ok("postgres is ready");
-    }
-    if accessories.contains(&"redis".to_string()) {
-      log("waiting for redis to be ready...");
-      wait_for_redis_ready(&cfg.app).await?;
-      ok("redis is ready");
-    }
-  }
+  wait_for_accessories(&cfg.app, &accessories).await?;
+
   log("running migrations");
   run_migrations(&cfg, &tags.sha).await?;
 
@@ -152,5 +140,24 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   }
 
   ok("deploy complete");
+  Ok(())
+}
+
+async fn wait_for_accessories(app: &str, accessories: &[String]) -> Result<()> {
+  if !accessories.is_empty() {
+    // Ensure accessories are started and ready before running migrations
+    log("enabling and starting accessories");
+    start_accessories(app).await?;
+    if accessories.contains(&"postgres".to_string()) {
+      log("waiting for postgres to be ready...");
+      wait_for_postgres_ready(app).await?;
+      ok("postgres is ready");
+    }
+    if accessories.contains(&"redis".to_string()) {
+      log("waiting for redis to be ready...");
+      wait_for_redis_ready(app).await?;
+      ok("redis is ready");
+    }
+  }
   Ok(())
 }
