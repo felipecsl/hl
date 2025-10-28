@@ -28,6 +28,7 @@ impl BuildSecret {
 pub struct BuildPushOptions {
   pub context: String,
   pub dockerfile: Option<String>,
+  pub git_sha: String,
   pub tags: Vec<String>,
   pub platforms: Option<String>,
   pub secrets: Vec<BuildSecret>,
@@ -52,6 +53,9 @@ pub async fn build_and_push(opts: BuildPushOptions) -> Result<()> {
   }
 
   let mut args: Vec<OsString> = vec!["buildx".into(), "build".into(), "--push".into()];
+
+  args.push("--build-arg".into());
+  args.push(format!("GIT_SHA={}", opts.git_sha).into());
 
   if let Some(platforms) = &opts.platforms {
     args.push("--platform".into());

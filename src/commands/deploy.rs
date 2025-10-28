@@ -96,6 +96,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   build_and_push(BuildPushOptions {
     context: worktree.to_string_lossy().to_string(),
     dockerfile: Some(dockerfile.to_string_lossy().to_string()),
+    git_sha: tags.sha.clone(),
     tags: vec![tags.sha.clone(), tags.branch_sha, tags.latest.clone()],
     platforms: Some(cfg.platforms.clone()),
     secrets,
