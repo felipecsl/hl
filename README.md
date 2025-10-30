@@ -183,7 +183,7 @@ BASH
 chmod +x ~/.local/bin/hl
 ```
 
-### 1) Bootstrap an app (one-time, on the server)
+### 1) Bootstrap an app
 
 ```bash
 # Create runtime home, compose, hl.yml, systemd
@@ -196,7 +196,7 @@ hl init \
 
 This creates:
 
-- `/home/<user>/hl/apps/recipes/{compose.yml,.env,hl.yml}`
+- `~/hl/apps/recipes/{compose.yml,.env,hl.yml}`
 - `app-recipes.service` (enabled)
 
 ### 2) Environment Variables
@@ -215,20 +215,9 @@ hl accessory add recipes postgres --version 16
 # Writes compose.postgres.yml, updates systemd, restarts.
 ```
 
-### 4) Create a bare repo + hook (one-time)
-
-On the server:
-
-```
-/home/<user>/hl/git/recipes.git/hooks/post-receive
-```
-
-Triggers `hl deploy --app <appname> --sha "$newrev" --branch "$branch"`
-
-### 5) Push to deploy
+### 4) Push to deploy
 
 ```bash
-# on your laptop
 git remote add production ssh://<user>@<host>/home/<user>/hl/git/recipes.git
 git push production master
 ```
@@ -242,7 +231,7 @@ The pipeline:
 - Restarts `app-recipes.service`
 - Waits for health
 
-### 6) Rollback
+### 5) Rollback
 
 ```bash
 hl rollback recipes eef6fc6
@@ -252,7 +241,7 @@ Retags `:latest` to the specified sha, restarts, and health-checks.
 
 ---
 
-## Available Commands (Snapshot)
+## Available Commands
 
 > **Command names/flags may differ in your Rust implementation, but this is the intended surface:**
 
