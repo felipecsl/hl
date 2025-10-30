@@ -163,7 +163,25 @@ services:
 
 ---
 
-## Using `hl` (Typical Workflow)
+## Getting started
+
+```bash
+cargo build --release
+scp target/release/hl <host>:~/.local/bin
+```
+
+Create a wrapper script for invoking `hl` on the remote host via `ssh`:
+
+```bash
+cat > ~/.local/bin/hl <<'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+REMOTE_USER="${REMOTE_USER:-homelab}"
+REMOTE_HOST="${REMOTE_HOST:-homelab.local}"   # or your server fqdn
+ssh "${REMOTE_USER}@${REMOTE_HOST}" "~/.local/bin/hl $*"
+BASH
+chmod +x ~/.local/bin/hl
+```
 
 ### 1) Bootstrap an app (one-time, on the server)
 
