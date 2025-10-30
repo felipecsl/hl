@@ -20,7 +20,7 @@
 - **Deterministic:** deploy exactly the pushed commit, no working tree drift.
 - **Explicit:** no Watchtower; restarts are performed by `hl`.
 - **Boring primitives:** Git, Docker (Buildx), Traefik, Docker Compose, systemd.
-- **Ergonomics:** one per-app folder on the server (`/home/<user>/hl/apps/<app>`), one systemd unit, minimal YAML.
+- **Ergonomics:** one per-app folder on the server (`~/hl/apps/<app>`), one systemd unit, minimal YAML.
 - **Small blast radius:** per-app everything (compose/env/config) — easy to reason about and recover.
 
 ---
@@ -29,7 +29,7 @@
 
 **Core flow**
 
-1. **Push:** You push to a **bare repo** on the server (e.g., `/home/<user>/hl/git/<app>.git`).
+1. **Push:** You push to a **bare repo** on the server (e.g., `~/hl/git/<app>.git`).
 2. **Hook → `hl deploy`:** The repo’s `post-receive` hook invokes `hl deploy` with `--sha` and `--branch`.
 3. **Export commit:** `hl` **exports that exact commit** (via `git archive`) to an **ephemeral build context**.
 4. **Build & push image:** Docker **Buildx** builds and pushes tags:
@@ -43,7 +43,7 @@
 **Runtime layout (per app)**
 
 ```
-/home/<user>/hl/apps/<app>/
+~/hl/apps/<app>/
   compose.yml              # app service + Traefik labels
   compose.<accessory>.yml  # e.g., compose.postgres.yml
   .env                     # runtime secrets (0600)
@@ -94,7 +94,7 @@ systemd: app-<app>.service # enabled at boot
 
 ## Configuration (`hl.yml`)
 
-> **Server-owned** file at `/home/<user>/hl/apps/<app>/hl.yml`.
+> **Server-owned** file at `~/hl/apps/<app>/hl.yml`.
 
 ```yaml
 app: recipes
