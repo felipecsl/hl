@@ -64,10 +64,11 @@ done
 # Test SSH connection
 info "Testing SSH connection to ${REMOTE_USER}@${REMOTE_HOST}..."
 if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${REMOTE_USER}@${REMOTE_HOST}" "exit" 2>/dev/null; then
-  error "Failed to connect via SSH. Please verify:"
-  echo "  1. The hostname/IP is correct"
-  echo "  2. SSH key authentication is set up"
-  echo "  3. You can manually SSH: ssh ${REMOTE_USER}@${REMOTE_HOST}"
+  echo ""
+  error "Failed to connect via SSH. Please verify:
+  1. The hostname/IP is correct
+  2. SSH key authentication is set up
+  3. You can manually SSH: ssh ${REMOTE_USER}@${REMOTE_HOST}"
 fi
 success "SSH connection successful"
 echo ""
