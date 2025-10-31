@@ -5,6 +5,19 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump to apply when preparing a release"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: "Override version (takes precedence over bump); leave blank to auto-bump"
+        required: false
 
 permissions:
   contents: write
@@ -17,8 +30,85 @@ defaults:
     shell: bash
 
 jobs:
+  prepare:
+    name: Prepare release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install cargo-edit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit
+
+      - name: Bump crate version
+        id: bump
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
+          CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${CUSTOM_VERSION}" ]]; then
+            echo "Setting version to ${CUSTOM_VERSION}"
+            cargo set-version "${CUSTOM_VERSION}"
+          else
+            echo "Bumping version (${BUMP})"
+            cargo set-version --bump "${BUMP}"
+          fi
+
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "hl") | .version')"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Commit and tag release
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git status --short
+          git commit -am "Release v${VERSION}"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+
+      - name: Push changes
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          current_branch="$(git rev-parse --abbrev-ref HEAD)"
+          git push origin "${current_branch}"
+          git push origin "v${VERSION}"
+
+      - name: Release summary
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          {
+            echo "## Release preparation complete"
+            echo ""
+            echo "- Version: v${VERSION}"
+            echo "- Branch pushed: $(git rev-parse --abbrev-ref HEAD)"
+            echo "- Tag pushed: v${VERSION}"
+            echo ""
+            echo "A new workflow run will build and publish release artifacts once the tag push is processed."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   build:
     name: Build ${{ matrix.target }}
+    if: github.event_name == 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -103,6 +193,7 @@ jobs:
 
   publish:
     name: Publish release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: build
     steps:
