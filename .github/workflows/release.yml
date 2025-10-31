@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            use_cross: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            use_cross: true
+          - os: macos-14
+            target: aarch64-apple-darwin
+            use_cross: false
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            use_cross: false
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Cache cargo directories
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - name: Determine version
+        id: version
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          version="${ref#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build binary
+        run: |
+          if [[ "${{ matrix.use_cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p dist
+          bin_path="target/${{ matrix.target }}/release/hl"
+          archive="hl-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz"
+          cp "$bin_path" dist/hl
+          tar -C dist -czf "dist/${archive}" hl
+          rm dist/hl
+
+      - name: Package archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $BinPath = "target\${{ matrix.target }}\release\hl.exe"
+          $Archive = "dist\hl-${{ steps.version.outputs.version }}-${{ matrix.target }}.zip"
+          Copy-Item $BinPath "dist\hl.exe"
+          Compress-Archive -Path "dist\hl.exe" -DestinationPath $Archive -Force
+          Remove-Item "dist\hl.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl-${{ steps.version.outputs.version }}-${{ matrix.target }}
+          path: dist/*
+
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
