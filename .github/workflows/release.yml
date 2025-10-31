@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUBLISH_TOKEN }}
 
       - name: Configure git author
         run: |
