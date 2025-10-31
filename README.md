@@ -165,12 +165,40 @@ services:
 
 ## Getting started
 
+### Quick Install
+
+Use the installation script for an interactive setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh | bash
+```
+
+Or download and run it manually:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
+```
+
+The script will:
+- Prompt for your remote SSH username and hostname
+- Test the SSH connection (requires SSH key authentication)
+- Create a wrapper script that invokes `hl` on your remote server
+- Add the wrapper to your PATH
+
+**Note:** This assumes SSH public key authentication is already configured. If not, set it up first with `ssh-copy-id user@hostname`.
+
+### Manual Installation
+
+First, build and copy the binary to your remote server:
+
 ```bash
 cargo build --release
 scp target/release/hl <host>:~/.local/bin
 ```
 
-Create a wrapper script for invoking `hl` on the remote host via `ssh`:
+Then create a wrapper script for invoking `hl` on the remote host via `ssh`:
 
 ```bash
 cat > ~/.local/bin/hl <<'BASH'
