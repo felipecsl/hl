@@ -65,7 +65,7 @@ sleep 2
 
 # Copy the public key to the container
 info "Setting up SSH authentication..."
-docker exec hl-test-ssh bash -c "echo '$(cat /tmp/hl-test-key.pub)' >> /home/testuser/.ssh/authorized_keys"
+docker cp /tmp/hl-test-key.pub hl-test-ssh:/home/testuser/.ssh/authorized_keys
 docker exec hl-test-ssh bash -c "chmod 600 /home/testuser/.ssh/authorized_keys && chown testuser:testuser /home/testuser/.ssh/authorized_keys"
 success "SSH authentication configured"
 

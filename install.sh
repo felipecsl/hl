@@ -95,7 +95,7 @@ cat > "$WRAPPER_PATH" <<WRAPPER_SCRIPT
 set -euo pipefail
 REMOTE_USER="${REMOTE_USER}"
 REMOTE_HOST="${REMOTE_HOST}"
-ssh "\${REMOTE_USER}@\${REMOTE_HOST}" "~/.local/bin/hl \$*"
+ssh "\${REMOTE_USER}@\${REMOTE_HOST}" "~/.local/bin/hl \"\$@\""
 WRAPPER_SCRIPT
 
 # Make the wrapper executable
