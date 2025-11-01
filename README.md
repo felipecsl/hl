@@ -2,6 +2,55 @@
 
 **Goal:** Keep deployments on a single host dead-simple, explicit, and reliable — without adopting a full orchestrator.
 
+## Getting started
+
+### Quick Install
+
+Use the installation script for an interactive setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh | bash
+```
+
+Or download and run it manually:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
+```
+
+The script will:
+
+- Prompt for your remote SSH username and hostname
+- Test the SSH connection (requires SSH key authentication)
+- Create a wrapper script that invokes `hl` on your remote server
+- Add the wrapper to your PATH
+
+**Note:** This assumes SSH public key authentication is already configured. If not, set it up first with `ssh-copy-id user@hostname`.
+
+### Manual Installation
+
+First, build and copy the binary to your remote server:
+
+```bash
+cargo build --release
+scp target/release/hl <host>:~/.local/bin
+```
+
+Then create a wrapper script for invoking `hl` on the remote host via `ssh`:
+
+```bash
+cat > ~/.local/bin/hl <<'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+REMOTE_USER="${REMOTE_USER:-homelab}"
+REMOTE_HOST="${REMOTE_HOST:-homelab.local}"   # or your server fqdn
+ssh "${REMOTE_USER}@${REMOTE_HOST}" "~/.local/bin/hl $*"
+BASH
+chmod +x ~/.local/bin/hl
+```
+
 ---
 
 ## Motivation & Goals
@@ -10,7 +59,6 @@
 
 - You have a single VPS/home server and multiple apps.
 - You want **Heroku-style** “`git push` → build → deploy”, but:
-
   - no complex control planes,
   - no multi-host orchestration,
   - no hidden daemons updating containers behind your back.
@@ -33,7 +81,6 @@
 2. **Hook → `hl deploy`:** The repo’s `post-receive` hook invokes `hl deploy` with `--sha` and `--branch`.
 3. **Export commit:** `hl` **exports that exact commit** (via `git archive`) to an **ephemeral build context**.
 4. **Build & push image:** Docker **Buildx** builds and pushes tags:
-
    - `:<shortsha>`, `:<branch>-<shortsha>`, and `:latest`.
 
 5. **Migrations (optional):** `hl` runs DB migrations in a one-off container using the new image tag.
@@ -151,7 +198,6 @@ services:
 - Write `compose.postgres.yml` with a healthy `pg` service on the same network.
 - Add `depends_on: { pg: { condition: service_healthy } }` to your app (via the fragment).
 - Generate/update `.env` with:
-
   - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
   - `DATABASE_URL=postgres://USER:PASSWORD@pg:5432/DB`
 
@@ -162,54 +208,6 @@ services:
 > Same pattern can add **Redis** (`compose.redis.yml`, `REDIS_URL=redis://redis:6379/0`) and others.
 
 ---
-
-## Getting started
-
-### Quick Install
-
-Use the installation script for an interactive setup:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh | bash
-```
-
-Or download and run it manually:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/felipecsl/hl/master/install.sh -o install.sh
-chmod +x install.sh
-./install.sh
-```
-
-The script will:
-- Prompt for your remote SSH username and hostname
-- Test the SSH connection (requires SSH key authentication)
-- Create a wrapper script that invokes `hl` on your remote server
-- Add the wrapper to your PATH
-
-**Note:** This assumes SSH public key authentication is already configured. If not, set it up first with `ssh-copy-id user@hostname`.
-
-### Manual Installation
-
-First, build and copy the binary to your remote server:
-
-```bash
-cargo build --release
-scp target/release/hl <host>:~/.local/bin
-```
-
-Then create a wrapper script for invoking `hl` on the remote host via `ssh`:
-
-```bash
-cat > ~/.local/bin/hl <<'BASH'
-#!/usr/bin/env bash
-set -euo pipefail
-REMOTE_USER="${REMOTE_USER:-homelab}"
-REMOTE_HOST="${REMOTE_HOST:-homelab.local}"   # or your server fqdn
-ssh "${REMOTE_USER}@${REMOTE_HOST}" "~/.local/bin/hl $*"
-BASH
-chmod +x ~/.local/bin/hl
-```
 
 ### 1) Bootstrap an app
 
