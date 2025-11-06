@@ -24,8 +24,10 @@ The script will:
 
 - Prompt for your remote SSH username and hostname
 - Test the SSH connection (requires SSH key authentication)
-- Create a wrapper script that invokes `hl` on your remote server
-- Add the wrapper to your PATH
+- Download the latest `hl` release binary from Github
+- `scp` it to your server
+- Create a wrapper script that invokes it via `ssh`
+- Add the wrapper to your `$PATH`
 
 **Note:** This assumes SSH public key authentication is already configured. If not, set it up first with `ssh-copy-id user@hostname`.
 
