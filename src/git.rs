@@ -235,7 +235,7 @@ while read -r oldrev newrev refname; do
   case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
     *) continue;;
   esac
-  {}/.hl/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
+  {}/.local/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
 done
 "#,
     home_dir, app_name
