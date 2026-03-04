@@ -25,6 +25,8 @@ pub fn parse_app_name_from_remote_url(url: &str) -> Option<String> {
 
 /// Infer the app name from the `HL_APP` env var or from git remotes in the current directory.
 pub async fn infer_app_name() -> Result<String> {
+  let cwd = std::env::current_dir().context("Failed to read current working directory")?;
+
   // Check HL_APP env var first
   if let Ok(app) = std::env::var("HL_APP") {
     let app = app.trim().to_string();
@@ -48,7 +50,15 @@ pub async fn infer_app_name() -> Result<String> {
   }
 
   // Run `git remote -v` and parse output
-  let output = Command::new("git").args(["remote", "-v"]).output().await;
+  let output = Command::new("git")
+    .arg("-C")
+    .arg(&cwd)
+    .args(["remote", "-v"])
+    // Ignore caller-provided repository overrides for deterministic inference.
+    .env_remove("GIT_DIR")
+    .env_remove("GIT_WORK_TREE")
+    .output()
+    .await;
 
   let output = match output {
     Ok(o) => o,
