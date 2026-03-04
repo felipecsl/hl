@@ -21,6 +21,13 @@ pub fn infer_app_name() -> Result<String> {
   if let Ok(app) = std::env::var("HL_APP") {
     let app = app.trim().to_string();
     if !app.is_empty() {
+      let valid_name_re = Regex::new(r"^[A-Za-z0-9_-]+$").unwrap();
+      if !valid_name_re.is_match(&app) {
+        anyhow::bail!(
+          "Invalid HL_APP value {:?}. App names may only contain letters, digits, '-' and '_'",
+          app
+        );
+      }
       return Ok(app);
     }
   }
