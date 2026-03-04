@@ -1,4 +1,4 @@
-use crate::log::debug;
+use crate::{config::hl_root, log::debug};
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::os::unix::fs::PermissionsExt;
@@ -41,6 +41,12 @@ pub async fn infer_app_name() -> Result<String> {
     }
   }
 
+  // If running inside an hl app directory, infer from path:
+  // /home/<user>/hl/apps/<app>[/...]
+  if let Some(app) = infer_app_name_from_hl_app_dir() {
+    return Ok(app);
+  }
+
   // Run `git remote -v` and parse output
   let output = Command::new("git").args(["remote", "-v"]).output().await;
 
@@ -48,14 +54,21 @@ pub async fn infer_app_name() -> Result<String> {
     Ok(o) => o,
     Err(_) => {
       anyhow::bail!(
-        "Not a git repository (or git is not installed). Run this command from a project directory with a git remote."
+        "Could not infer app name. Set HL_APP, run from /home/<user>/hl/apps/<app>, or run from a git project directory with an hl remote."
       );
     }
   };
 
   if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stderr.is_empty() {
+      anyhow::bail!(
+        "Could not infer app name. Set HL_APP, run from /home/<user>/hl/apps/<app>, or run from a git project directory with an hl remote."
+      );
+    }
     anyhow::bail!(
-      "Not a git repository. Run this command from a project directory with a git remote."
+      "Could not infer app name from git remotes: {}. Set HL_APP, run from /home/<user>/hl/apps/<app>, or run from a git project directory with an hl remote.",
+      stderr
     );
   }
 
@@ -86,6 +99,22 @@ pub async fn infer_app_name() -> Result<String> {
       );
     }
   }
+}
+
+fn infer_app_name_from_hl_app_dir() -> Option<String> {
+  let cwd = std::env::current_dir().ok()?;
+  let root = hl_root();
+
+  for dir in cwd.ancestors() {
+    if dir.parent() == Some(root.as_path()) {
+      let app = dir.file_name()?.to_string_lossy().trim().to_string();
+      if !app.is_empty() {
+        return Some(app);
+      }
+    }
+  }
+
+  None
 }
 
 /// Export a git commit to a temporary directory
@@ -346,6 +375,8 @@ done
 #[cfg(test)]
 mod tests {
   use super::*;
+  use serial_test::serial;
+  use tempfile::TempDir;
 
   #[tokio::test]
   async fn test_create_temp_dir() {
@@ -446,6 +477,7 @@ done
   }
 
   #[tokio::test]
+  #[serial]
   async fn test_infer_app_name_from_env() {
     std::env::set_var("HL_APP", "envapp");
     let result = infer_app_name().await;
@@ -454,11 +486,33 @@ done
   }
 
   #[tokio::test]
+  #[serial]
   async fn test_infer_app_name_empty_env_falls_through() {
     std::env::set_var("HL_APP", "");
     let result = infer_app_name().await;
     std::env::remove_var("HL_APP");
     // Should not return Ok("") — it should fall through and either find remotes or error
     assert!(result.is_err() || result.unwrap() != "");
+  }
+
+  #[tokio::test]
+  #[serial]
+  async fn test_infer_app_name_from_hl_app_dir() -> Result<()> {
+    let tmp = TempDir::new()?;
+    let hl_root = tmp.path().join("apps");
+    let app_dir = hl_root.join("myapp");
+    tokio::fs::create_dir_all(app_dir.join("nested")).await?;
+
+    let original_cwd = std::env::current_dir()?;
+    std::env::set_var("HL_ROOT_OVERRIDE", &hl_root);
+    std::env::set_current_dir(app_dir.join("nested"))?;
+
+    let result = infer_app_name().await;
+
+    std::env::set_current_dir(original_cwd)?;
+    std::env::remove_var("HL_ROOT_OVERRIDE");
+
+    assert_eq!(result?, "myapp");
+    Ok(())
   }
 }
