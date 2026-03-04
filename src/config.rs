@@ -43,6 +43,8 @@ pub struct HLConfig {
   pub migrations: MigrationsConfig,
   #[serde(default)]
   pub secrets: Vec<String>,
+  #[serde(default)]
+  pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

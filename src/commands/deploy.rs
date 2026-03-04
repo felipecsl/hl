@@ -57,9 +57,13 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
 
   let cfg = load_config(&opts.app).await?;
 
+  // Regenerate base compose.yml so hl.yml changes (volumes, image, network) propagate
+  let app_directory = app_dir(&cfg.app);
+  log("regenerating base compose file");
+  write_base_compose_file(&app_directory, &cfg.image, &cfg.network, &cfg.volumes).await?;
+
   // Generate process-specific compose files
   log("generating process compose files");
-  let app_directory = app_dir(&cfg.app);
   write_process_compose_files(&app_directory, processes.as_ref(), &cfg.app, &cfg.resolver).await?;
 
   let systemd_dir = systemd_dir();
