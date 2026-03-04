@@ -233,6 +233,11 @@ fn build_migration_args(cfg: &HLConfig, image_tag: &str, env_path: &str) -> Vec<
 }
 
 pub async fn run_migrations(cfg: &HLConfig, image_tag: &str) -> Result<()> {
+  if cfg.migrations.command.is_empty() {
+    debug("migrations command is empty, skipping");
+    return Ok(());
+  }
+
   let dir = app_dir(&cfg.app);
   let env_path = env_file(&cfg.app);
   let env_path_str = env_path.to_string_lossy().to_string();
