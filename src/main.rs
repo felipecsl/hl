@@ -7,6 +7,7 @@ use hl::log::set_verbose;
 #[derive(Parser)]
 #[command(name = "hl")]
 #[command(about = "Homelab deploy toolbox", long_about = None)]
+#[command(version)]
 struct Cli {
   /// Enable verbose/debug logging
   #[arg(short, long, global = true)]

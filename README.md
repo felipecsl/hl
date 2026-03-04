@@ -31,6 +31,16 @@ The script will:
 
 **Note:** This assumes SSH public key authentication is already configured. If not, set it up first with `ssh-copy-id user@hostname`.
 
+### Install Unreleased (Current Commit)
+
+To test the latest unreleased code from your local `HEAD` commit, run:
+
+```bash
+./install-head.sh
+```
+
+This script archives your current local commit, builds `hl` locally from that commit, uploads the binary to the remote server, and creates the same local SSH wrapper.
+
 ### Manual Installation
 
 First, build and copy the binary to your remote server:
