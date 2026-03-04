@@ -3,6 +3,7 @@ use clap::{Args, Subcommand};
 use hl::{
   config::{app_dir, build_env_file, env_file},
   env::load_env_file_contents,
+  git::infer_app_name,
 };
 use std::path::Path;
 use tokio::fs;
@@ -17,8 +18,6 @@ pub struct EnvArgs {
 pub enum EnvCommands {
   /// Set environment variables
   Set {
-    /// Application name
-    app: String,
     /// KEY=VALUE pairs
     pairs: Vec<String>,
     /// Store as build-time secrets
@@ -27,8 +26,6 @@ pub enum EnvCommands {
   },
   /// List environment variable keys (values masked)
   Ls {
-    /// Application name
-    app: String,
     /// List build-time secrets
     #[arg(long)]
     build: bool,
@@ -36,9 +33,10 @@ pub enum EnvCommands {
 }
 
 pub async fn execute(args: EnvArgs) -> Result<()> {
+  let app = infer_app_name().await?;
   match args.command {
-    EnvCommands::Set { app, pairs, build } => set_env(&app, pairs, build).await,
-    EnvCommands::Ls { app, build } => list_env(&app, build).await,
+    EnvCommands::Set { pairs, build } => set_env(&app, pairs, build).await,
+    EnvCommands::Ls { build } => list_env(&app, build).await,
   }
 }
 

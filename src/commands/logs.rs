@@ -1,14 +1,11 @@
 use anyhow::Result;
 use clap::Args;
-use hl::{config::app_dir, log::*};
+use hl::{config::app_dir, git::infer_app_name, log::*};
 use std::process::Stdio;
 use tokio::process::Command;
 
 #[derive(Args)]
 pub struct LogsArgs {
-  /// Application name
-  pub app: String,
-
   /// Follow log output (stream logs)
   #[arg(short, long)]
   pub follow: bool,
@@ -23,7 +20,8 @@ pub struct LogsArgs {
 }
 
 pub async fn execute(args: LogsArgs) -> Result<()> {
-  let dir = app_dir(&args.app);
+  let app = infer_app_name().await?;
+  let dir = app_dir(&app);
 
   debug(&format!("logs: app_dir={}", dir.display()));
 
