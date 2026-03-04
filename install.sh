@@ -193,7 +193,36 @@ cat > "$WRAPPER_PATH" <<WRAPPER_SCRIPT
 set -euo pipefail
 REMOTE_USER="${REMOTE_USER}"
 REMOTE_HOST="${REMOTE_HOST}"
-ssh "\${REMOTE_USER}@\${REMOTE_HOST}" ~/.local/bin/hl "\$@"
+
+infer_hl_app() {
+  local -a apps
+  mapfile -t apps < <(
+    git remote -v 2>/dev/null \
+      | awk '{print $2}' \
+      | sed -nE 's#.*[:/]hl/git/([^/]+)\.git\$#\1#p' \
+      | sort -u
+  )
+
+  case "\${#apps[@]}" in
+    0) return 0 ;;
+    1) printf '%s\n' "\${apps[0]}" ;;
+    *)
+      echo "Error: multiple hl remotes found (\${apps[*]}). Set HL_APP explicitly." >&2
+      exit 1
+      ;;
+  esac
+}
+
+APP_NAME="\${HL_APP:-}"
+if [ -z "\$APP_NAME" ]; then
+  APP_NAME="\$(infer_hl_app || true)"
+fi
+
+if [ -n "\$APP_NAME" ]; then
+  ssh "\${REMOTE_USER}@\${REMOTE_HOST}" HL_APP="\$APP_NAME" ~/.local/bin/hl "\$@"
+else
+  ssh "\${REMOTE_USER}@\${REMOTE_HOST}" ~/.local/bin/hl "\$@"
+fi
 WRAPPER_SCRIPT
 
 # Make the wrapper executable
