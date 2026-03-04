@@ -177,7 +177,7 @@ infer_hl_app() {
   local -a apps
   mapfile -t apps < <(
     git remote -v 2>/dev/null \
-      | awk '{print $2}' \
+      | awk '{print \$2}' \
       | sed -nE 's#.*[:/]hl/git/([^/]+)\.git\$#\1#p' \
       | sort -u
   )
