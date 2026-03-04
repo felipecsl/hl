@@ -29,9 +29,8 @@ pub async fn infer_app_name() -> Result<String> {
   if let Ok(app) = std::env::var("HL_APP") {
     let app = app.trim().to_string();
     if !app.is_empty() {
-      let valid_name_re = VALID_NAME_RE.get_or_init(|| {
-        Regex::new(r"^[A-Za-z0-9_-]+$").expect("VALID_NAME_RE is a valid regex")
-      });
+      let valid_name_re = VALID_NAME_RE
+        .get_or_init(|| Regex::new(r"^[A-Za-z0-9_-]+$").expect("VALID_NAME_RE is a valid regex"));
       if !valid_name_re.is_match(&app) {
         anyhow::bail!(
           "Invalid HL_APP value {:?}. App names may only contain letters, digits, '-' and '_'",
@@ -43,10 +42,7 @@ pub async fn infer_app_name() -> Result<String> {
   }
 
   // Run `git remote -v` and parse output
-  let output = Command::new("git")
-    .args(["remote", "-v"])
-    .output()
-    .await;
+  let output = Command::new("git").args(["remote", "-v"]).output().await;
 
   let output = match output {
     Ok(o) => o,
