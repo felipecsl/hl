@@ -166,7 +166,7 @@ systemd: app-<app>.service # enabled at boot
 
 - **Simplicity:** Git hooks + Docker Buildx + Compose + systemd.
 - **Deterministic builds:** every deploy uses `git archive` of the exact commit.
-- **Fast rollback:** `hl rollback <app> <sha>` retags and health-checks.
+- **Fast rollback:** `hl rollback <sha>` retags and health-checks.
 - **Clear logs:** `journalctl -u app-<app>.service` for runtime; deploy logs in hook/CLI output.
 - **Separation of concerns:** build (ephemeral) vs. runtime (per-app directory).
 - **Server-owned config:** domains, networks, health, secrets stay off the image.
@@ -234,7 +234,7 @@ services:
 
 ## Accessories (Example: Postgres)
 
-`hl accessory add <app> postgres` will:
+`hl accessory add postgres` will:
 
 - Write `compose.postgres.yml` with a healthy `pg` service on the same network.
 - Add `depends_on: { pg: { condition: service_healthy } }` to your app (via the fragment).
@@ -271,14 +271,14 @@ This creates:
 Add optional `--build` for build-time env vars (e.g., docker build secrets).
 
 ```bash
-hl env set [--build] recipes RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
-hl env ls recipes  # prints keys with values redacted
+hl env set [--build] RAILS_MASTER_KEY=... SECRET_KEY_BASE=...
+hl env ls  # prints keys with values redacted
 ```
 
 ### 3) Add Postgres (optional)
 
 ```bash
-hl accessory add recipes postgres --version 16
+hl accessory add postgres --version 16
 # Writes compose.postgres.yml, updates systemd, restarts.
 ```
 
@@ -301,7 +301,7 @@ The pipeline:
 ### 5) Rollback
 
 ```bash
-hl rollback recipes eef6fc6
+hl rollback eef6fc6
 ```
 
 Retags `:latest` to the specified sha, restarts, and health-checks.
@@ -311,24 +311,25 @@ Retags `:latest` to the specified sha, restarts, and health-checks.
 ## Available Commands
 
 > **Command names/flags may differ in your Rust implementation, but this is the intended surface:**
+> `--app` is only required for `hl init`. Other app-scoped commands expect `HL_APP` (set explicitly or by the local wrapper script).
 
 - `hl init --app <name> --image <ref> --domain <host> --port <num> [--network traefik_proxy] [--resolver myresolver]`
   Create `compose.yml`, `.env`, `hl.yml`, and systemd unit.
 
-- `hl deploy --app <name> --sha <sha> [--branch <name>]`
+- `hl deploy --sha <sha> [--branch <name>]`
   Export commit → build & push → migrate → retag → restart (systemd) → health-gate.
 
-- `hl rollback <app> <sha>`
+- `hl rollback <sha>`
   Retag `:latest` → `<sha>`, restart, health-gate.
 
-- `hl secrets set <app> KEY=VALUE [KEY=VALUE ...]`
-  Update the app’s `.env` (0600).
-  `hl secrets ls <app>` to list keys redacted.
+- `hl env set [--build] KEY=VALUE [KEY=VALUE ...]`
+  Update the app’s `.env`/`.env.build` (0600).
+  `hl env ls [--build]` to list keys redacted.
 
-- `hl accessory add <app> postgres [--version <v>] [--user <u>] [--db <name>] [--password <p>]`
+- `hl accessory add postgres [--version <v>] [--user <u>] [--database <name>] [--password <p>]`
   Add Postgres as an accessory and wire `DATABASE_URL`.
 
-- `hl accessory add <app> redis [--version <v>]`
+- `hl accessory add redis [--version <v>]`
   Add Redis as an accessory and wire `REDIS_URL`.
 
 ---
@@ -385,7 +386,7 @@ networks:
 Laptop                                     Server
 ------                                     -------------------------------------
 git push  ───────────────────────────────▶  bare repo: <app>.git
-                                           post-receive → hl deploy --app --sha --branch
+                                           post-receive → HL_APP=<app> hl deploy --sha --branch
                                            ├─ export commit (git archive) → ephemeral dir
                                            ├─ docker buildx build --push (:<sha>, :<branch>-<sha>, :latest)
                                            ├─ run migrations (docker run ... :<sha>)
