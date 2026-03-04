@@ -170,15 +170,15 @@ networks:
 
   // Regenerate the systemd unit to include the new compose.postgres.yml file
   let systemd_dir = systemd_dir();
-  let processes = discover_processes(&systemd_dir, &app)?;
-  let accessories = discover_accessories(&systemd_dir, &dir, &app, &processes)?;
-  write_unit(&app, &processes, &accessories).await?;
+  let processes = discover_processes(&systemd_dir, app)?;
+  let accessories = discover_accessories(&systemd_dir, &dir, app, &processes)?;
+  write_unit(app, &processes, &accessories).await?;
   ok("regenerated systemd unit file to include postgres compose file");
   apply_unit_changes(&format!("app-{}-acc.service", app)).await?;
   log("waiting for postgres to be ready...");
-  wait_for_postgres_ready(&app).await?;
+  wait_for_postgres_ready(app).await?;
   ok("postgres is ready");
-  restart_app_target(&app).await?;
+  restart_app_target(app).await?;
 
   Ok(())
 }
@@ -204,7 +204,7 @@ async fn add_redis(app: &str, opts: AddArgs) -> Result<()> {
   let version = opts.version.unwrap_or_else(|| "7".to_string());
 
   // Load config to get the network name
-  let config = load_config(&app).await?;
+  let config = load_config(app).await?;
   let network = config.network;
 
   let compose_redis = format!(
@@ -273,15 +273,15 @@ networks:
   }
 
   let systemd_dir = systemd_dir();
-  let processes = discover_processes(&systemd_dir, &app)?;
-  let accessories = discover_accessories(&systemd_dir, &dir, &app, &processes)?;
-  write_unit(&app, &processes, &accessories).await?;
+  let processes = discover_processes(&systemd_dir, app)?;
+  let accessories = discover_accessories(&systemd_dir, &dir, app, &processes)?;
+  write_unit(app, &processes, &accessories).await?;
   ok("regenerated systemd unit file to include redis compose file");
   apply_unit_changes(&format!("app-{}-acc.service", app)).await?;
   log("waiting for redis to be ready...");
-  wait_for_redis_ready(&app).await?;
+  wait_for_redis_ready(app).await?;
   ok("redis is ready");
-  restart_app_target(&app).await?;
+  restart_app_target(app).await?;
 
   Ok(())
 }
