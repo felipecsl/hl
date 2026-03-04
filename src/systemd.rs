@@ -148,6 +148,15 @@ pub async fn enable_accessories(app: &str) -> Result<()> {
   systemctl_cmd(&["--user", "enable", "--now", &unit]).await
 }
 
+pub async fn enable_accessories_if_present(app: &str, accessories: &[String]) -> Result<()> {
+  if accessories.is_empty() {
+    debug("no accessories found, skipping accessories systemd enable");
+    return Ok(());
+  }
+
+  enable_accessories(app).await
+}
+
 pub async fn restart_accessories(app: &str) -> Result<()> {
   let unit = format!("app-{}-acc.service", app);
   debug(&format!("restarting systemd service: {}", unit));
@@ -358,6 +367,13 @@ Description=Test app target"#
     // Verify target file still exists (not a .service file)
     assert!(target_file.exists(), "Target file should NOT be deleted");
 
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_enable_accessories_if_present_skips_when_empty() -> Result<()> {
+    let accessories: Vec<String> = vec![];
+    enable_accessories_if_present("testapp", &accessories).await?;
     Ok(())
   }
 

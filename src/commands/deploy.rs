@@ -9,7 +9,7 @@ use hl::{
   health::wait_for_healthy,
   log::*,
   procfile::parse_procfile,
-  systemd::{enable_accessories, reload_systemd_daemon, start_accessories, write_unit},
+  systemd::{enable_accessories_if_present, reload_systemd_daemon, start_accessories, write_unit},
 };
 
 #[derive(Args)]
@@ -111,9 +111,10 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   log("retagging latest");
   retag_latest(&cfg.image, &tags.sha).await?;
 
-  log("enabling systemd service");
+  log("reloading systemd daemon");
   reload_systemd_daemon().await?;
-  enable_accessories(&cfg.app).await?;
+  log("ensuring accessories systemd service is enabled when present");
+  enable_accessories_if_present(&cfg.app, &accessories).await?;
 
   log("restarting services");
   restart_compose(&cfg, &process_names, &accessories).await?;
