@@ -20,7 +20,7 @@ pub struct LogsArgs {
 }
 
 pub async fn execute(args: LogsArgs) -> Result<()> {
-  let app = infer_app_name()?;
+  let app = infer_app_name().await?;
   let dir = app_dir(&app);
 
   debug(&format!("logs: app_dir={}", dir.display()));

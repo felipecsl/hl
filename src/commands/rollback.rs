@@ -16,7 +16,7 @@ pub struct RollbackArgs {
 }
 
 pub async fn execute(args: RollbackArgs) -> Result<()> {
-  let app = infer_app_name()?;
+  let app = infer_app_name().await?;
   let cfg = load_config(&app).await?;
   let short_sha = &args.sha[..7.min(args.sha.len())];
   let from = format!("{}:{}", cfg.image, short_sha);

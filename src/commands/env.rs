@@ -33,7 +33,7 @@ pub enum EnvCommands {
 }
 
 pub async fn execute(args: EnvArgs) -> Result<()> {
-  let app = infer_app_name()?;
+  let app = infer_app_name().await?;
   match args.command {
     EnvCommands::Set { pairs, build } => set_env(&app, pairs, build).await,
     EnvCommands::Ls { build } => list_env(&app, build).await,
