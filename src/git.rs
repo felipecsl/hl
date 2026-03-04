@@ -4,14 +4,22 @@ use regex::Regex;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::OnceLock;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
+/// Compiled regex for parsing app names from hl git remote URLs.
+static APP_NAME_RE: OnceLock<Regex> = OnceLock::new();
+
+/// Compiled regex for validating app names read from the `HL_APP` env var.
+static VALID_NAME_RE: OnceLock<Regex> = OnceLock::new();
+
 /// Parse an app name from a git remote URL matching the hl convention.
 /// Expects URLs containing `/hl/git/<app>.git`.
 pub fn parse_app_name_from_remote_url(url: &str) -> Option<String> {
-  let re = Regex::new(r"/hl/git/([^/]+)\.git\b").unwrap();
+  let re = APP_NAME_RE
+    .get_or_init(|| Regex::new(r"/hl/git/([^/]+)\.git\b").expect("APP_NAME_RE is a valid regex"));
   re.captures(url).map(|c| c[1].to_string())
 }
 
@@ -21,7 +29,9 @@ pub async fn infer_app_name() -> Result<String> {
   if let Ok(app) = std::env::var("HL_APP") {
     let app = app.trim().to_string();
     if !app.is_empty() {
-      let valid_name_re = Regex::new(r"^[A-Za-z0-9_-]+$").unwrap();
+      let valid_name_re = VALID_NAME_RE.get_or_init(|| {
+        Regex::new(r"^[A-Za-z0-9_-]+$").expect("VALID_NAME_RE is a valid regex")
+      });
       if !valid_name_re.is_match(&app) {
         anyhow::bail!(
           "Invalid HL_APP value {:?}. App names may only contain letters, digits, '-' and '_'",
