@@ -48,7 +48,7 @@ cat > ~/.local/bin/hl <<'BASH'
 set -euo pipefail
 REMOTE_USER="${REMOTE_USER:-homelab}"
 REMOTE_HOST="${REMOTE_HOST:-homelab.local}"   # or your server fqdn
-ssh "${REMOTE_USER}@${REMOTE_HOST}" "~/.local/bin/hl $*"
+ssh "${REMOTE_USER}@${REMOTE_HOST}" ~/.local/bin/hl "$@"
 BASH
 chmod +x ~/.local/bin/hl
 ```
