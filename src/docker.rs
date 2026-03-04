@@ -301,7 +301,18 @@ pub fn tag_for(cfg: &HLConfig, sha: &str, branch: &str) -> ImageTags {
 }
 
 /// Generate the base compose.yml file content for an application
-pub async fn write_base_compose_file(dir: &Path, image: &str, network: &str) -> Result<()> {
+pub async fn write_base_compose_file(
+  dir: &Path,
+  image: &str,
+  network: &str,
+  volumes: &[String],
+) -> Result<()> {
+  let volumes_section = if volumes.is_empty() {
+    String::new()
+  } else {
+    let entries: Vec<String> = volumes.iter().map(|v| format!("      - {}", v)).collect();
+    format!("\n    volumes:\n{}", entries.join("\n"))
+  };
   let compose = format!(
     r#"
 services:
@@ -310,14 +321,15 @@ services:
     restart: unless-stopped
     env_file: [.env]
     networks: [{network}]
-    profiles: ["_template"]
+    profiles: ["_template"]{volumes_section}
 networks:
   {network}:
     external: true
     name: {network}
 "#,
     image = image,
-    network = network
+    network = network,
+    volumes_section = volumes_section
   );
   let compose_path = dir.join("compose.yml");
   fs::write(&compose_path, compose).await?;
@@ -633,7 +645,7 @@ mod tests {
     let dir_path = temp_dir.path();
     let image = "registry.example.com/testapp";
     let network = "traefik_proxy";
-    write_base_compose_file(dir_path, image, network).await?;
+    write_base_compose_file(dir_path, image, network, &[]).await?;
     let compose_path = dir_path.join("compose.yml");
     assert!(compose_path.exists(), "compose.yml should be created");
     let content = fs::read_to_string(&compose_path).await?;
@@ -653,6 +665,39 @@ networks:
     assert_eq!(
       content, expected,
       "Compose file content should match expected output"
+    );
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn test_write_base_compose_file_with_volumes() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let dir_path = temp_dir.path();
+    let image = "registry.example.com/testapp";
+    let network = "traefik_proxy";
+    let volumes = vec!["./data:/app/packages/server/data".to_string()];
+    write_base_compose_file(dir_path, image, network, &volumes).await?;
+    let compose_path = dir_path.join("compose.yml");
+    assert!(compose_path.exists(), "compose.yml should be created");
+    let content = fs::read_to_string(&compose_path).await?;
+    let expected = r#"
+services:
+  base:
+    image: registry.example.com/testapp:latest
+    restart: unless-stopped
+    env_file: [.env]
+    networks: [traefik_proxy]
+    profiles: ["_template"]
+    volumes:
+      - ./data:/app/packages/server/data
+networks:
+  traefik_proxy:
+    external: true
+    name: traefik_proxy
+"#;
+    assert_eq!(
+      content, expected,
+      "Compose file content should include volumes section"
     );
     Ok(())
   }
@@ -683,6 +728,7 @@ networks:
         env: env_vars,
       },
       secrets: vec![],
+      volumes: vec![],
     };
 
     let image_tag = "registry.example.com/testapp:abc1234";
