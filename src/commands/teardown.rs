@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Args;
 use hl::{
   config::{app_dir, hl_git_root, systemd_dir},
+  git::infer_app_name,
   log::*,
   systemd::{reload_systemd_daemon, stop_disable_app_target},
 };
@@ -11,17 +12,13 @@ use tokio::{fs, process::Command};
 
 #[derive(Args)]
 pub struct TeardownArgs {
-  /// Application name
-  #[arg(long)]
-  pub app: String,
-
   /// Skip confirmation prompt
   #[arg(long)]
   pub force: bool,
 }
 
 pub async fn execute(args: TeardownArgs) -> Result<()> {
-  let app = &args.app;
+  let app = &infer_app_name()?;
 
   // Confirmation prompt unless --force is used
   if !args.force {

@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use hl::config::{app_dir, load_config, systemd_dir};
 use hl::discovery::{discover_accessories, discover_processes};
+use hl::git::infer_app_name;
 use hl::docker::{wait_for_postgres_ready, wait_for_redis_ready};
 use hl::env::{load_env_file_contents, write_env_file_contents};
 use hl::log::*;
@@ -25,10 +26,6 @@ pub enum AccessoriesCommand {
 
 #[derive(Args)]
 pub struct AddArgs {
-  /// Application name
-  #[arg(long)]
-  pub app: String,
-
   /// Accessory type (e.g., postgres, redis)
   pub accessory: String,
 
@@ -56,9 +53,10 @@ pub async fn execute(opts: AccessoriesArgs) -> Result<()> {
 }
 
 async fn execute_add(opts: AddArgs) -> Result<()> {
+  let app = infer_app_name()?;
   match opts.accessory.as_str() {
-    "postgres" => add_postgres(opts).await,
-    "redis" => add_redis(opts).await,
+    "postgres" => add_postgres(&app, opts).await,
+    "redis" => add_redis(&app, opts).await,
     _ => {
       anyhow::bail!("unsupported accessory type: {}", opts.accessory);
     }
@@ -77,18 +75,18 @@ fn ensure_app_dir_exists(app: &str) -> Result<std::path::PathBuf> {
   Ok(dir)
 }
 
-async fn add_postgres(opts: AddArgs) -> Result<()> {
-  let dir = ensure_app_dir_exists(&opts.app)?;
+async fn add_postgres(app: &str, opts: AddArgs) -> Result<()> {
+  let dir = ensure_app_dir_exists(app)?;
 
   // Set defaults
   let version = opts.version.unwrap_or_else(|| "17".to_string());
-  let user = opts.user.unwrap_or_else(|| opts.app.clone());
-  let database = opts.database.unwrap_or_else(|| opts.app.clone());
+  let user = opts.user.unwrap_or_else(|| app.to_string());
+  let database = opts.database.unwrap_or_else(|| app.to_string());
   let password = opts.password.unwrap_or_else(generate_password);
-  let postgres_host = format!("{app}_pg", app = opts.app);
+  let postgres_host = format!("{app}_pg", app = app);
 
   // Load config to get the network name
-  let config = load_config(&opts.app).await?;
+  let config = load_config(app).await?;
   let network = config.network;
 
   let compose_postgres = format!(
@@ -172,15 +170,15 @@ networks:
 
   // Regenerate the systemd unit to include the new compose.postgres.yml file
   let systemd_dir = systemd_dir();
-  let processes = discover_processes(&systemd_dir, &opts.app)?;
-  let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
-  write_unit(&opts.app, &processes, &accessories).await?;
+  let processes = discover_processes(&systemd_dir, &app)?;
+  let accessories = discover_accessories(&systemd_dir, &dir, &app, &processes)?;
+  write_unit(&app, &processes, &accessories).await?;
   ok("regenerated systemd unit file to include postgres compose file");
-  apply_unit_changes(&format!("app-{}-acc.service", opts.app)).await?;
+  apply_unit_changes(&format!("app-{}-acc.service", app)).await?;
   log("waiting for postgres to be ready...");
-  wait_for_postgres_ready(&opts.app).await?;
+  wait_for_postgres_ready(&app).await?;
   ok("postgres is ready");
-  restart_app_target(&opts.app).await?;
+  restart_app_target(&app).await?;
 
   Ok(())
 }
@@ -199,14 +197,14 @@ fn generate_password() -> String {
     .collect()
 }
 
-async fn add_redis(opts: AddArgs) -> Result<()> {
-  let dir = ensure_app_dir_exists(&opts.app)?;
+async fn add_redis(app: &str, opts: AddArgs) -> Result<()> {
+  let dir = ensure_app_dir_exists(app)?;
 
   // Set default version
   let version = opts.version.unwrap_or_else(|| "7".to_string());
 
   // Load config to get the network name
-  let config = load_config(&opts.app).await?;
+  let config = load_config(&app).await?;
   let network = config.network;
 
   let compose_redis = format!(
@@ -230,7 +228,7 @@ networks:
     external: true
     name: {}
 "#,
-    version, opts.app, network, network, network
+    version, app, network, network, network
   );
 
   let redis_compose_path = dir.join("compose.redis.yml");
@@ -255,7 +253,7 @@ networks:
       env_content.push('\n');
     }
 
-    let redis_url = format!("REDIS_URL=redis://{}_redis:6379/0\n", opts.app);
+    let redis_url = format!("REDIS_URL=redis://{}_redis:6379/0\n", app);
     env_content.push_str(&redis_url);
 
     // Write the updated content
@@ -275,15 +273,15 @@ networks:
   }
 
   let systemd_dir = systemd_dir();
-  let processes = discover_processes(&systemd_dir, &opts.app)?;
-  let accessories = discover_accessories(&systemd_dir, &dir, &opts.app, &processes)?;
-  write_unit(&opts.app, &processes, &accessories).await?;
+  let processes = discover_processes(&systemd_dir, &app)?;
+  let accessories = discover_accessories(&systemd_dir, &dir, &app, &processes)?;
+  write_unit(&app, &processes, &accessories).await?;
   ok("regenerated systemd unit file to include redis compose file");
-  apply_unit_changes(&format!("app-{}-acc.service", opts.app)).await?;
+  apply_unit_changes(&format!("app-{}-acc.service", app)).await?;
   log("waiting for redis to be ready...");
-  wait_for_redis_ready(&opts.app).await?;
+  wait_for_redis_ready(&app).await?;
   ok("redis is ready");
-  restart_app_target(&opts.app).await?;
+  restart_app_target(&app).await?;
 
   Ok(())
 }

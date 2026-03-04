@@ -1,11 +1,78 @@
 use crate::log::debug;
 use anyhow::{Context, Result};
+use regex::Regex;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+
+/// Parse an app name from a git remote URL matching the hl convention.
+/// Expects URLs containing `/hl/git/<app>.git`.
+pub fn parse_app_name_from_remote_url(url: &str) -> Option<String> {
+  let re = Regex::new(r"/hl/git/([^/]+)\.git\b").unwrap();
+  re.captures(url).map(|c| c[1].to_string())
+}
+
+/// Infer the app name from the `HL_APP` env var or from git remotes in the current directory.
+pub fn infer_app_name() -> Result<String> {
+  // Check HL_APP env var first
+  if let Ok(app) = std::env::var("HL_APP") {
+    let app = app.trim().to_string();
+    if !app.is_empty() {
+      return Ok(app);
+    }
+  }
+
+  // Run `git remote -v` and parse output
+  let output = std::process::Command::new("git")
+    .args(["remote", "-v"])
+    .output();
+
+  let output = match output {
+    Ok(o) => o,
+    Err(_) => {
+      anyhow::bail!(
+        "Not a git repository (or git is not installed). Run this command from a project directory with a git remote."
+      );
+    }
+  };
+
+  if !output.status.success() {
+    anyhow::bail!(
+      "Not a git repository. Run this command from a project directory with a git remote."
+    );
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let mut app_names: Vec<String> = stdout
+    .lines()
+    .filter_map(|line| {
+      // Each line is: <name>\t<url> (fetch|push)
+      let url = line.split_whitespace().nth(1)?;
+      parse_app_name_from_remote_url(url)
+    })
+    .collect();
+
+  app_names.sort();
+  app_names.dedup();
+
+  match app_names.len() {
+    0 => {
+      anyhow::bail!(
+        "No hl remote found. Add a remote like:\n  git remote add production ssh://user@host/home/user/hl/git/<app>.git"
+      );
+    }
+    1 => Ok(app_names.into_iter().next().unwrap()),
+    _ => {
+      anyhow::bail!(
+        "Multiple hl apps found in git remotes: {}. Set HL_APP to pick one.",
+        app_names.join(", ")
+      );
+    }
+  }
+}
 
 /// Export a git commit to a temporary directory
 ///
@@ -235,10 +302,10 @@ while read -r oldrev newrev refname; do
   case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
     *) continue;;
   esac
-  {}/.local/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
+  HL_APP={} {}/.local/bin/hl deploy --sha "$newrev" --branch "$branch"
 done
 "#,
-    home_dir, app_name
+    app_name, home_dir
   );
 
   fs::write(&hook_path, hook_content)
@@ -314,14 +381,70 @@ while read -r oldrev newrev refname; do
   case "$refname" in refs/heads/*) branch="${{refname#refs/heads/}}";;
     *) continue;;
   esac
-  {}/.local/bin/hl deploy --app {} --sha "$newrev" --branch "$branch"
+  HL_APP={} {}/.local/bin/hl deploy --sha "$newrev" --branch "$branch"
 done
 "#,
-      home_dir, app_name
+      app_name, home_dir
     );
     assert_eq!(hook_contents, expected_hook);
 
     // Cleanup
     tokio::fs::remove_dir_all(&git_dir).await.ok();
+  }
+
+  #[test]
+  fn test_parse_app_name_from_remote_url_ssh() {
+    let url = "ssh://deploy@myhost/home/deploy/hl/git/myapp.git";
+    assert_eq!(
+      parse_app_name_from_remote_url(url),
+      Some("myapp".to_string())
+    );
+  }
+
+  #[test]
+  fn test_parse_app_name_from_remote_url_local_path() {
+    let url = "/home/user/hl/git/webapp.git";
+    assert_eq!(
+      parse_app_name_from_remote_url(url),
+      Some("webapp".to_string())
+    );
+  }
+
+  #[test]
+  fn test_parse_app_name_from_remote_url_no_match() {
+    assert_eq!(
+      parse_app_name_from_remote_url("git@github.com:user/repo.git"),
+      None
+    );
+    assert_eq!(
+      parse_app_name_from_remote_url("https://github.com/user/repo"),
+      None
+    );
+  }
+
+  #[test]
+  fn test_parse_app_name_from_remote_url_with_dashes() {
+    let url = "ssh://u@h/home/u/hl/git/my-cool-app.git";
+    assert_eq!(
+      parse_app_name_from_remote_url(url),
+      Some("my-cool-app".to_string())
+    );
+  }
+
+  #[test]
+  fn test_infer_app_name_from_env() {
+    std::env::set_var("HL_APP", "envapp");
+    let result = infer_app_name();
+    std::env::remove_var("HL_APP");
+    assert_eq!(result.unwrap(), "envapp");
+  }
+
+  #[test]
+  fn test_infer_app_name_empty_env_falls_through() {
+    std::env::set_var("HL_APP", "");
+    let result = infer_app_name();
+    std::env::remove_var("HL_APP");
+    // Should not return Ok("") — it should fall through and either find remotes or error
+    assert!(result.is_err() || result.unwrap() != "");
   }
 }

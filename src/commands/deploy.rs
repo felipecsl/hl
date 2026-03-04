@@ -5,7 +5,7 @@ use hl::{
   discovery::discover_accessories,
   docker::*,
   env::load_build_secrets,
-  git::export_commit,
+  git::{export_commit, infer_app_name},
   health::wait_for_healthy,
   log::*,
   procfile::parse_procfile,
@@ -14,10 +14,6 @@ use hl::{
 
 #[derive(Args)]
 pub struct DeployArgs {
-  /// Application name
-  #[arg(long)]
-  pub app: String,
-
   /// Git commit SHA
   #[arg(long)]
   pub sha: String,
@@ -28,8 +24,9 @@ pub struct DeployArgs {
 }
 
 pub async fn execute(opts: DeployArgs) -> Result<()> {
+  let app = infer_app_name()?;
   // Export the commit to a temporary directory
-  let repo_path = hl_git_root(&opts.app)
+  let repo_path = hl_git_root(&app)
     .to_str()
     .expect("repo path is not valid UTF-8")
     .to_string();
@@ -55,7 +52,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
     None
   };
 
-  let cfg = load_config(&opts.app).await?;
+  let cfg = load_config(&app).await?;
 
   // Regenerate base compose.yml so hl.yml changes (volumes, image, network) propagate
   let app_directory = app_dir(&cfg.app);
@@ -70,8 +67,8 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   let process_names = processes
     .map(|p| p.keys().cloned().collect::<Vec<String>>())
     .unwrap_or_else(|| vec!["web".to_string()]);
-  let accessories = discover_accessories(&systemd_dir, &app_directory, &opts.app, &process_names)?;
-  write_unit(&opts.app, &process_names, &accessories).await?;
+  let accessories = discover_accessories(&systemd_dir, &app_directory, &app, &process_names)?;
+  write_unit(&app, &process_names, &accessories).await?;
 
   let tags = tag_for(&cfg, &opts.sha, &opts.branch);
 
@@ -95,7 +92,7 @@ pub async fn execute(opts: DeployArgs) -> Result<()> {
   debug(&format!("build context: {}", worktree.display()));
 
   // load build-time secrets from .env.build
-  let secrets = load_build_secrets(&opts.app)?;
+  let secrets = load_build_secrets(&app)?;
 
   build_and_push(BuildPushOptions {
     context: worktree.to_string_lossy().to_string(),

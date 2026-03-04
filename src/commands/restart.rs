@@ -1,17 +1,14 @@
 use anyhow::Result;
 use clap::Args;
-use hl::{log::*, systemd::restart_app_target};
+use hl::{git::infer_app_name, log::*, systemd::restart_app_target};
 
 #[derive(Args)]
-pub struct RestartArgs {
-  /// Application name
-  #[arg(long)]
-  pub app: String,
-}
+pub struct RestartArgs {}
 
-pub async fn execute(args: RestartArgs) -> Result<()> {
-  log(&format!("restarting service for app: {}", args.app));
-  restart_app_target(&args.app).await?;
+pub async fn execute(_args: RestartArgs) -> Result<()> {
+  let app = infer_app_name()?;
+  log(&format!("restarting service for app: {}", app));
+  restart_app_target(&app).await?;
   ok("restart complete");
   Ok(())
 }
