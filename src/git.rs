@@ -16,7 +16,7 @@ pub fn parse_app_name_from_remote_url(url: &str) -> Option<String> {
 }
 
 /// Infer the app name from the `HL_APP` env var or from git remotes in the current directory.
-pub fn infer_app_name() -> Result<String> {
+pub async fn infer_app_name() -> Result<String> {
   // Check HL_APP env var first
   if let Ok(app) = std::env::var("HL_APP") {
     let app = app.trim().to_string();
@@ -33,9 +33,10 @@ pub fn infer_app_name() -> Result<String> {
   }
 
   // Run `git remote -v` and parse output
-  let output = std::process::Command::new("git")
+  let output = Command::new("git")
     .args(["remote", "-v"])
-    .output();
+    .output()
+    .await;
 
   let output = match output {
     Ok(o) => o,
@@ -438,18 +439,18 @@ done
     );
   }
 
-  #[test]
-  fn test_infer_app_name_from_env() {
+  #[tokio::test]
+  async fn test_infer_app_name_from_env() {
     std::env::set_var("HL_APP", "envapp");
-    let result = infer_app_name();
+    let result = infer_app_name().await;
     std::env::remove_var("HL_APP");
     assert_eq!(result.unwrap(), "envapp");
   }
 
-  #[test]
-  fn test_infer_app_name_empty_env_falls_through() {
+  #[tokio::test]
+  async fn test_infer_app_name_empty_env_falls_through() {
     std::env::set_var("HL_APP", "");
-    let result = infer_app_name();
+    let result = infer_app_name().await;
     std::env::remove_var("HL_APP");
     // Should not return Ok("") — it should fall through and either find remotes or error
     assert!(result.is_err() || result.unwrap() != "");

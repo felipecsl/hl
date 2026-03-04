@@ -24,7 +24,7 @@ pub struct DeployArgs {
 }
 
 pub async fn execute(opts: DeployArgs) -> Result<()> {
-  let app = infer_app_name()?;
+  let app = infer_app_name().await?;
   // Export the commit to a temporary directory
   let repo_path = hl_git_root(&app)
     .to_str()

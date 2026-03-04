@@ -53,7 +53,7 @@ pub async fn execute(opts: AccessoriesArgs) -> Result<()> {
 }
 
 async fn execute_add(opts: AddArgs) -> Result<()> {
-  let app = infer_app_name()?;
+  let app = infer_app_name().await?;
   match opts.accessory.as_str() {
     "postgres" => add_postgres(&app, opts).await,
     "redis" => add_redis(&app, opts).await,

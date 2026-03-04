@@ -18,7 +18,7 @@ pub struct TeardownArgs {
 }
 
 pub async fn execute(args: TeardownArgs) -> Result<()> {
-  let app = &infer_app_name()?;
+  let app = &infer_app_name().await?;
 
   // Confirmation prompt unless --force is used
   if !args.force {
