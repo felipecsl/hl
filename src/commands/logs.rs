@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Args;
-use hl::{config::app_dir, git::infer_app_name, log::*};
+use hl::{git::infer_app_name, log::*};
 use std::process::Stdio;
 use tokio::process::Command;
 
@@ -13,64 +13,28 @@ pub struct LogsArgs {
   /// Number of lines to show from the end of the logs
   #[arg(short = 'n', long)]
   pub tail: Option<String>,
-
-  /// Show logs for specific service (default: all services)
-  #[arg(short, long)]
-  pub service: Option<String>,
 }
 
 pub async fn execute(args: LogsArgs) -> Result<()> {
   let app = infer_app_name().await?;
-  let dir = app_dir(&app);
 
-  debug(&format!("logs: app_dir={}", dir.display()));
+  let mut docker_args = vec!["logs".to_string()];
 
-  if !dir.exists() {
-    anyhow::bail!("App directory not found: {}", dir.display());
-  }
-
-  let compose_file = dir.join("compose.yml");
-  if !compose_file.exists() {
-    anyhow::bail!("compose.yml not found at: {}", compose_file.display());
-  }
-
-  // Build compose file list
-  let mut compose_args = vec!["-f".to_string(), "compose.yml".to_string()];
-
-  // Check for compose.postgres.yml
-  let postgres_compose = dir.join("compose.postgres.yml");
-  if postgres_compose.exists() {
-    compose_args.push("-f".to_string());
-    compose_args.push("compose.postgres.yml".to_string());
-  }
-
-  compose_args.push("logs".to_string());
-
-  // Add follow flag
   if args.follow {
-    compose_args.push("--follow".to_string());
+    docker_args.push("--follow".to_string());
   }
 
-  // Add tail flag
   if let Some(tail) = args.tail {
-    compose_args.push("--tail".to_string());
-    compose_args.push(tail);
+    docker_args.push("--tail".to_string());
+    docker_args.push(tail);
   }
 
-  // Add specific service if specified
-  if let Some(service) = args.service {
-    compose_args.push(service);
-  }
+  docker_args.push(app.clone());
 
-  debug(&format!(
-    "executing docker compose command: docker compose {}",
-    compose_args.join(" ")
-  ));
+  debug(&format!("executing: docker {}", docker_args.join(" ")));
 
   let status = Command::new("docker")
-    .arg("compose")
-    .args(&compose_args)
-    .current_dir(&dir)
+    .args(&docker_args)
     .stdin(Stdio::inherit())
     .stdout(Stdio::inherit())
     .stderr(Stdio::inherit())
@@ -78,7 +42,7 @@ pub async fn execute(args: LogsArgs) -> Result<()> {
     .await?;
 
   if !status.success() {
-    anyhow::bail!("docker compose logs failed with status: {}", status);
+    anyhow::bail!("docker logs failed with status: {}", status);
   }
 
   Ok(())
