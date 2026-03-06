@@ -31,10 +31,7 @@ pub async fn execute(args: LogsArgs) -> Result<()> {
 
   docker_args.push(app.clone());
 
-  debug(&format!(
-    "executing: docker {}",
-    docker_args.join(" ")
-  ));
+  debug(&format!("executing: docker {}", docker_args.join(" ")));
 
   let status = Command::new("docker")
     .args(&docker_args)
