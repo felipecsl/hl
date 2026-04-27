@@ -23,7 +23,7 @@ dotenvy = "0.15.7"
 
 [dev-dependencies]
 tempfile = "3.26"
-serial_test = "3.3"
+serial_test = "3.4"
 
 [profile.release]
 lto = true
